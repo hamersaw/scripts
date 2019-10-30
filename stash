@@ -1,0 +1,130 @@
+#!/bin/zsh
+usage() {
+    echo "USAGE $0 [COMMAND]
+COMMANDS:
+    help                display this help menu
+    get <key>           retrieve a value for the specified key
+    init                initailize the stash repositoryG
+    list [subkey]       find all keys containing the specified subkey
+    set <key> <value>   store the value for the specified key
+    unset <key>         remove values for the key (and all subkeys)"
+}
+
+stashcode() {
+    echo $1 | md5sum | awk '{print $1}'
+}
+
+stashfile() {
+    echo $(stashcode $1) | awk '{print substr($1,1,2)}'
+}
+
+# set environment variables
+STASH_DIR="$HOME/.stash"
+STASH_GPG_USERNAME="hamersaw@bushpath.com"
+
+# TODO - check if necessary environment variables are set
+#[[ ! -v STASH_DIR ]] && echo "'STASH_DIR' variable not set" && exit 1
+#[[ ! -v STASH_GPG_USERNAME ]] \
+#    && echo "'STASH_GPG_USERNAME' variable not set" && exit 1
+
+# initialize instance variables
+LISTFILE="$STASH_DIR/listfile.gpg"
+
+# execute command
+case "$1" in
+    help)
+        usage
+        ;;
+    get)
+        # check argument length
+        (( $# != 2 )) && \
+            echo "the 'get' command requires one argument" && exit 1
+
+        # retrieve 'VALUE' for all 'KEY's (including subkeys)
+        for KEY in `gpg -d -q $LISTFILE | grep "^$2"`; do
+            STASHFILE="$STASH_DIR/$(stashfile $KEY)"
+            VALUE=$(gpg -d -q $STASHFILE.gpg \
+                | grep "^$(stashcode $KEY)" | awk '{print $2}')
+
+            echo "$KEY : $VALUE"
+        done
+
+        ;;
+    init)
+        # test if STASH_DIR already exists
+        [ -d "$STASH_DIR" ] && \
+            echo "stash directory '$STASH_DIR' already exists" && exit 1
+
+        # create STASH_DIR and LISTFILE
+        mkdir -p $STASH_DIR
+        echo "" | sed "/^$/d" \
+            | gpg -e -r $STASH_GPG_USERNAME > $LISTFILE
+
+        ;;
+    list)
+        if [[ -z $2 ]]; then
+            # if no second argument -> output all keys
+            gpg -d -q $LISTFILE
+        else
+            # if a second argument -> print only those keys
+            gpg -d -q $LISTFILE | grep "^$2"
+        fi
+
+        ;;
+    set)
+        # check argument length
+        (( $# != 3 )) && \
+            echo "the 'set' command requires two arguments" && exit 1
+
+        # check if 'KEY' exists in LISTFILE
+        gpg -d -q $LISTFILE | grep -q "^$2$" && \
+            echo "key '$2' already exists" && exit 1
+
+        # initialize STASHFILE
+        STASHFILE="$STASH_DIR/$(stashfile $2)"
+        [ ! -f $STASHFILE.gpg ] && echo "" | sed "/^$/d" \
+            | gpg -e -r $STASH_GPG_USERNAME > $STASHFILE.gpg
+
+        # add 'KEY VALUE' to STASHFILE
+        mv $STASHFILE.gpg $STASHFILE.gpg.tmp
+        { echo "$(stashcode $2) $3"; gpg -d -q $STASHFILE.gpg.tmp; } \
+            | gpg -e -r $STASH_GPG_USERNAME > $STASHFILE.gpg
+        rm $STASHFILE.gpg.tmp
+
+        # add 'KEY' to LISTFILE
+        mv $LISTFILE $LISTFILE.tmp
+        { echo "$2"; gpg -d -q $LISTFILE.tmp; } \
+            | gpg -e -r $STASH_GPG_USERNAME > $LISTFILE
+        rm $LISTFILE.tmp
+
+        ;;
+    unset)
+        # check argument length
+        (( $# != 2 )) && \
+            echo "the 'unset' command requires one argument" && exit 1
+
+        # execute on all KEYS in LISTFILE
+        for KEY in $(gpg -d -q $LISTFILE | grep "$2"); do
+            # remove KEY from listfile
+            mv $LISTFILE $LISTFILE.tmp
+            gpg -d -q $LISTFILE.tmp | sed "/^$KEY/d" \
+                | gpg -e -r $STASH_GPG_USERNAME > $LISTFILE
+            rm $LISTFILE.tmp
+
+            # remove KEY from STASHFILE
+            STASHFILE="$STASH_DIR/$(stashfile $KEY)"
+            mv $STASHFILE.gpg $STASHFILE.gpg.tmp
+            gpg -d -q $STASHFILE.gpg.tmp | sed "/^$(stashcode $KEY)*/d" \
+                | gpg -e -r $STASH_GPG_USERNAME > $STASHFILE.gpg
+            rm $STASHFILE.gpg.tmp
+
+            # if STASHFILE is empty -> delete
+            [ -z "$(gpg -d -q $STASHFILE.gpg)" ] && rm $STASHFILE.gpg
+        done
+
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac
