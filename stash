@@ -1,34 +1,37 @@
-#!/bin/zsh
+#!/bin/bash
 usage() {
     echo "USAGE $0 [COMMAND]
 COMMANDS:
     help                display this help menu
     get <key>           retrieve a value for the specified key
-    init                initailize the stash repositoryG
+    init <gpg-username> initailize the stash repositoryG
     list [subkey]       find all keys containing the specified subkey
     set <key> <value>   store the value for the specified key
     unset <key>         remove values for the key (and all subkeys)"
 }
 
 stashcode() {
-    echo $1 | md5sum | awk '{print $1}'
+    echo "$1" | md5sum | awk '{print $1}'
 }
 
 stashfile() {
-    echo $(stashcode $1) | awk '{print substr($1,1,2)}'
+    echo "$(stashcode $1 | awk '{print substr($1,1,2)}').gpg"
 }
 
-# set environment variables
-STASH_DIR="$HOME/.stash"
-STASH_GPG_USERNAME="hamersaw@bushpath.com"
+# load commands from library
+. library.sh
 
-# TODO - check if necessary environment variables are set
-#[[ ! -v STASH_DIR ]] && echo "'STASH_DIR' variable not set" && exit 1
-#[[ ! -v STASH_GPG_USERNAME ]] \
-#    && echo "'STASH_GPG_USERNAME' variable not set" && exit 1
+# check if applications are available
+! inPath gpg && echo "'gpg' not found in users PATH" && exit 1
 
 # initialize instance variables
+STASH_DIR="$HOME/.stash"
 LISTFILE="$STASH_DIR/listfile.gpg"
+USERFILE="$STASH_DIR/userfile"
+
+if [ -f $USERFILE ]; then
+    GPG_USERNAME=$(cat $USERFILE)
+fi
 
 # execute command
 case "$1" in
@@ -43,7 +46,7 @@ case "$1" in
         # retrieve 'VALUE' for all 'KEY's (including subkeys)
         for KEY in `gpg -d -q $LISTFILE | grep "^$2"`; do
             STASHFILE="$STASH_DIR/$(stashfile $KEY)"
-            VALUE=$(gpg -d -q $STASHFILE.gpg \
+            VALUE=$(gpg -d -q $STASHFILE \
                 | grep "^$(stashcode $KEY)" | awk '{print $2}')
 
             echo "$KEY : $VALUE"
@@ -51,14 +54,22 @@ case "$1" in
 
         ;;
     init)
+        # check argument length
+        (( $# != 2 )) && \
+            echo "the 'init' command requires one argument" && exit 1
+
+        # validate gpg username
+        [[ ! $(gpg --list-secret-keys | grep $2) ]] \
+            && echo "gpg key '$2' doesn't exist" && exit 1
+
         # test if STASH_DIR already exists
         [ -d "$STASH_DIR" ] && \
             echo "stash directory '$STASH_DIR' already exists" && exit 1
 
-        # create STASH_DIR and LISTFILE
+        # create STASH_DIR, LISTFILE, and USERFILE
         mkdir -p $STASH_DIR
-        echo "" | sed "/^$/d" \
-            | gpg -e -r $STASH_GPG_USERNAME > $LISTFILE
+        echo "" | sed "/^$/d" | gpg -e -r $2 > $LISTFILE
+        echo "$2" > $USERFILE
 
         ;;
     list)
@@ -82,19 +93,19 @@ case "$1" in
 
         # initialize STASHFILE
         STASHFILE="$STASH_DIR/$(stashfile $2)"
-        [ ! -f $STASHFILE.gpg ] && echo "" | sed "/^$/d" \
-            | gpg -e -r $STASH_GPG_USERNAME > $STASHFILE.gpg
+        [ ! -f $STASHFILE ] && echo "" | sed "/^$/d" \
+            | gpg -e -r $GPG_USERNAME > $STASHFILE
 
         # add 'KEY VALUE' to STASHFILE
-        mv $STASHFILE.gpg $STASHFILE.gpg.tmp
-        { echo "$(stashcode $2) $3"; gpg -d -q $STASHFILE.gpg.tmp; } \
-            | gpg -e -r $STASH_GPG_USERNAME > $STASHFILE.gpg
-        rm $STASHFILE.gpg.tmp
+        mv $STASHFILE $STASHFILE.tmp
+        { echo "$(stashcode $2) $3"; gpg -d -q $STASHFILE.tmp; } \
+            | gpg -e -r $GPG_USERNAME > $STASHFILE
+        rm $STASHFILE.tmp
 
         # add 'KEY' to LISTFILE
         mv $LISTFILE $LISTFILE.tmp
         { echo "$2"; gpg -d -q $LISTFILE.tmp; } \
-            | gpg -e -r $STASH_GPG_USERNAME > $LISTFILE
+            | gpg -e -r $GPG_USERNAME > $LISTFILE
         rm $LISTFILE.tmp
 
         ;;
@@ -108,18 +119,18 @@ case "$1" in
             # remove KEY from listfile
             mv $LISTFILE $LISTFILE.tmp
             gpg -d -q $LISTFILE.tmp | sed "/^$KEY/d" \
-                | gpg -e -r $STASH_GPG_USERNAME > $LISTFILE
+                | gpg -e -r $GPG_USERNAME > $LISTFILE
             rm $LISTFILE.tmp
 
             # remove KEY from STASHFILE
             STASHFILE="$STASH_DIR/$(stashfile $KEY)"
-            mv $STASHFILE.gpg $STASHFILE.gpg.tmp
-            gpg -d -q $STASHFILE.gpg.tmp | sed "/^$(stashcode $KEY)*/d" \
-                | gpg -e -r $STASH_GPG_USERNAME > $STASHFILE.gpg
-            rm $STASHFILE.gpg.tmp
+            mv $STASHFILE $STASHFILE.tmp
+            gpg -d -q $STASHFILE.tmp | sed "/^$(stashcode $KEY)*/d" \
+                | gpg -e -r $GPG_USERNAME > $STASHFILE
+            rm $STASHFILE.tmp
 
             # if STASHFILE is empty -> delete
-            [ -z "$(gpg -d -q $STASHFILE.gpg)" ] && rm $STASHFILE.gpg
+            [ -z "$(gpg -d -q $STASHFILE)" ] && rm $STASHFILE
         done
 
         ;;
