@@ -1,0 +1,50 @@
+#!/bin/bash
+# reference - https://www.atlassian.com/git/tutorials/dotfiles
+# reference - https://news.ycombinator.com/item?id=11071754
+
+usage() {
+    echo "USAGE $(basename $0) [COMMAND]
+COMMANDS:
+    help                display this help menu
+    clone <git-repo>    clone an existing dotfiles repository
+    init                initailize a new dotfiles repository
+    *                   forward arguments to git"
+}
+
+# load commands from library
+. library.sh
+
+# check if applications are available
+! inPath git && echo "'git' not found in users PATH" && exit 1
+
+# define instance variables
+DOTFILES_DIR="$HOME/.dotfiles"
+
+# execute command
+case "$1" in
+	help)
+		usage
+
+		;;
+    clone)
+        # check argument length
+        (( $# != 2 )) && \
+            echo "the 'clone' command requires a repository" && exit 1
+
+        # clone the remote repository
+        git clone --bare $2 $DOTFILES_DIR
+        echo "\ncomplete process with '$(basename $0) checkout'"
+
+        ;;
+    init)
+        # initialize a bare repository
+        git init --bare $DOTFILES_DIR
+        git --git-dir=$DOTFILES_DIR config \
+            --local status.showUntrackedFiles no
+
+        ;;
+    *)
+        # execute git command
+        git --git-dir=$DOTFILES_DIR --work-tree=$HOME $@
+        ;;
+esac

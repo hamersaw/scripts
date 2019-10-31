@@ -1,10 +1,10 @@
 #!/bin/bash
 usage() {
-    echo "USAGE $0 [COMMAND]
+    echo "USAGE $(basename $0) [COMMAND]
 COMMANDS:
     help                display this help menu
     get <key>           retrieve a value for the specified key
-    init <gpg-username> initailize the stash repositoryG
+    init <gpg-username> initailize the stash repository
     list [subkey]       find all keys containing the specified subkey
     set <key> <value>   store the value for the specified key
     unset <key>         remove values for the key (and all subkeys)"
