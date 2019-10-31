@@ -44,7 +44,22 @@ case "$1" in
 
         ;;
     *)
+        # wrap arguments containing a space in double quotes
+        args=()
+        for ARG in "$@"; do
+            case "$ARG" in
+                *\ * )
+                    args+=("\"$ARG\"")
+
+                    ;;
+                * )
+                    args+=($ARG)
+
+                    ;;
+            esac
+        done
+
         # execute git command
-        git --git-dir=$DOTFILES_DIR --work-tree=$HOME $@
+        git --git-dir=$DOTFILES_DIR --work-tree=$HOME ${args[@]}
         ;;
 esac

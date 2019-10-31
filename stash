@@ -1,4 +1,5 @@
 #!/bin/bash
+
 usage() {
     echo "USAGE $(basename $0) [COMMAND]
 COMMANDS:
