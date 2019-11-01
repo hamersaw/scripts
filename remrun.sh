@@ -10,6 +10,7 @@ OPTIONS:
 }
 
 # retrieve opts
+USERNAME=$(whoami)
 while getopts ":c:ho:u:" opt; do
     case $opt in
         c )
