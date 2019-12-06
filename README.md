@@ -9,4 +9,3 @@ Repository to house general-use scripts.
 - stash: an encrypted, hierarchical, key-value data store
 
 ## TODO
-- p166: managing backups

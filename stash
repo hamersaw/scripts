@@ -45,7 +45,7 @@ case "$1" in
             echo "the 'get' command requires one argument" && exit 1
 
         # retrieve 'VALUE' for all 'KEY's (including subkeys)
-        for KEY in `gpg -d -q $LISTFILE | grep "^$2"`; do
+        for KEY in $(gpg -d -q $LISTFILE | grep "^$2"); do
             STASHFILE="$STASH_DIR/$(stashfile $KEY)"
             VALUE=$(gpg -d -q $STASHFILE \
                 | grep "^$(stashcode $KEY)" | awk '{print $2}')
