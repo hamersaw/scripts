@@ -60,6 +60,6 @@ case "$1" in
         done
 
         # execute git command
-        git --git-dir=$DOTFILES_DIR --work-tree=$HOME ${args[@]}
+        git --git-dir=$DOTFILES_DIR --work-tree=$HOME "${args[@]}"
         ;;
 esac
