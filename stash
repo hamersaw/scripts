@@ -106,7 +106,7 @@ case "$1" in
         # add 'KEY' to LISTFILE
         mv $LISTFILE $LISTFILE.tmp
         { echo "$2"; gpg -d -q $LISTFILE.tmp; } \
-            | gpg -e -r $GPG_USERNAME > $LISTFILE
+            | sort | gpg -e -r $GPG_USERNAME > $LISTFILE
         rm $LISTFILE.tmp
 
         ;;
