@@ -1,0 +1,66 @@
+#!/bin/bash
+
+usage() {
+    echo "USAGE $(basename $0) [COMMAND]
+COMMANDS:
+    full                process all files
+    help                display this help menu
+    mod <timestamp>     process files modified since <timestamp>
+                            [ex. 201901011200]"
+}
+
+# initialize instance variables
+OUTPUT_DIRECTORY="/tmp"
+BACKUP_DIRECTORIES=( "Desktop" "Documents" "Pictures" )
+
+# load configuration and command library scripts
+. library.sh
+
+# check if applications are available
+! inPath tar && echo "'tar' not found in users PATH" && exit 1
+
+# execute command
+case "$1" in
+    full)
+        # initialize instance variables
+        BACKUP_FILENAME="$OUTPUT_DIRECTORY/$USER-$(hostname)-$(date +%Y%m%d%H%M).tgz"
+
+        # create a gzipped tar archive with all files
+        tar -czf $BACKUP_FILENAME -C $HOME ${BACKUP_DIRECTORIES[*]}
+        ;;
+    help)
+        usage
+        exit 0
+        ;;
+    mod)
+        # check argument length
+        (( $# != 2 )) && \
+            echo "the 'mod' command requires one argument" && exit 1
+
+        # initialize instance variables
+        BACKUP_FILENAME="$OUTPUT_DIRECTORY/$USER-$(hostname)-$2-$(date +%Y%m%d%H%M).tgz"
+        TIMESTAMP_FILENAME="$OUTPUT_DIRECTORY/timestamp"
+        MODIFIED_FILENAME="$OUTPUT_DIRECTORY/modified.txt"
+        HOME_PREFIX_LEN=`echo "$HOME/" | wc -c`
+
+        # create timestamp
+        touch -t $2 $TIMESTAMP_FILENAME
+        (( $? )) && exit 1
+
+        # find all files modified since CHANGE_TIMESTMAP
+        for DIRECTORY in "${BACKUP_DIRECTORIES[@]}"; do
+            find $HOME/$DIRECTORY -type f -newer $TIMESTAMP_FILENAME -print \
+                | cut -c$HOME_PREFIX_LEN- >> $MODIFIED_FILENAME
+        done
+
+        # create a gzipped tar archive with modified files
+        tar -czf $BACKUP_FILENAME -C $HOME `cat $MODIFIED_FILENAME`
+
+        # clean up temporary files
+        rm $TIMESTAMP_FILENAME $MODIFIED_FILENAME
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac
