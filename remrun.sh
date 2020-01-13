@@ -40,7 +40,7 @@ done
 # iterate over hosts
 for HOST in $HOSTS; do
     # execute command in background
-    (OUTPUT=$(ssh $USERNAME@$HOST -n -o ConnectTimeout=500 $COMMAND); \
+    (OUTPUT=$(ssh $USERNAME@$HOST -n -o ConnectTimeout=500 $COMMAND 2>&1); \
         echo -e "--$HOST--\n$OUTPUT") &
 done
 
