@@ -91,9 +91,6 @@ case "$MODE" in
         rm  $0
         ;;
     parallel)
-        echo "TMP - execute '$COMMAND' in 'parallel' mode"
-        exit 0
-
         # iterate over hosts
         for HOST in $HOSTS; do
             # execute command in background
