@@ -1,0 +1,111 @@
+#!/bin/bash
+
+usage() {
+    echo "Usage: $(basename $0) (-h | [-m <mode>] [-u <userame>] -o <hosts> -c <command>)
+OPTIONS:
+    -c <command>    the command to execute
+    -h              display this help menu
+    -m <mode>       execution command in specified mode 
+                        ['chain', 'parallel' (default)]
+    -o <hosts>      a space delimited list of hosts
+    -u <username    username to execute commands"
+}
+
+# retrieve opts
+USERNAME=$(whoami)
+HOSTS=""
+MODE="parallel"
+while getopts "c:hm:o:u:" opt; do
+    case $opt in
+        c)
+            COMMAND=$OPTARG
+            ;;
+        h)
+            usage
+            exit 0
+            ;;
+        m)
+            MODE=$OPTARG
+            ;;
+        o)
+            HOSTS=$OPTARG
+            ;;
+        u)
+            USERNAME=$OPTARG
+            ;;
+        ?)
+            usage
+            exit 1
+            ;;
+    esac
+done
+
+# check if necessary variables are set
+[[ -z "$COMMAND" ]] && echo "set command with '-c <command>'" && exit 1
+
+# trim leading and ending spaces from hosts string
+HOSTS=${HOSTS##*( )}
+HOSTS=${HOSTS%%*( )}
+
+# execute command
+case "$MODE" in
+    chain)
+        # retrieve first host - if no host then exit
+        HOST="$(echo $HOSTS | awk '{print $1;}')"
+        if [[ -z $HOST ]]; then
+            exit 0
+        fi
+
+        # copy script to remote machine
+        scp -q $0 $USERNAME@$HOST:/tmp
+
+        # execute remrun command on remote host
+        HOST_LENGTH=${#HOST}
+        HOST_LENGTH=$((HOST_LENGTH + 2))
+        HOSTS=$(echo $HOSTS | cut -c $HOST_LENGTH-)
+
+        ssh $USERNAME@$HOST -n -o ConnectTimeout=500 \
+            "/tmp/$(basename $0) -u $USERNAME -m hop -o '$HOSTS' -c '$COMMAND' </dev/null >/tmp/remrun.log 2>&1 &"
+        ;;
+    hop)
+        # execute the command
+        eval $COMMAND >/tmp/remrun-output.log 2>&1
+
+        # retrieve first host - if no host then exit
+        HOST="$(echo $HOSTS | awk '{print $1;}')"
+        if [[ -z $HOST ]]; then
+            exit 0
+        fi
+
+        # copy script to remote machine
+        scp -q $0 $USERNAME@$HOST:/tmp
+
+        # execute remrun command on remote host
+        HOST_LENGTH=${#HOST}
+        HOST_LENGTH=$((HOST_LENGTH + 1))
+
+        ssh $USERNAME@$HOST -n -o ConnectTimeout=500 \
+            "/tmp/$(basename $0) -u $USERNAME -m hop -o '$HOSTS' -c '$COMMAND' </dev/null >/tmp/remrun.log 2>&1 &"
+
+        # cleanup by deleting script
+        rm  $0
+        ;;
+    parallel)
+        echo "TMP - execute '$COMMAND' in 'parallel' mode"
+        exit 0
+
+        # iterate over hosts
+        for HOST in $HOSTS; do
+            # execute command in background
+            (OUTPUT=$(ssh $USERNAME@$HOST -n -o ConnectTimeout=500 $COMMAND 2>&1); \
+                echo -e "--$HOST--\n$OUTPUT") &
+        done
+
+        # wait for all commands to complete
+        wait
+        ;;
+    *)
+        echo "unknown execution mode '$MODE'"
+        exit 1
+        ;;
+esac
