@@ -71,21 +71,22 @@ case "$MODE" in
         # execute the command
         eval $COMMAND >/tmp/remrun-output.log 2>&1
 
-        # retrieve first host - if no host then exit
+        # retrieve first host
         HOST="$(echo $HOSTS | awk '{print $1;}')"
-        if [[ -z $HOST ]]; then
-            exit 0
+
+        # if HOST exists -> execute on next 'hop'
+        if [[ ! -z $HOST ]]; then
+            # copy script to remote machine
+            scp -q $0 $USERNAME@$HOST:/tmp
+
+            # execute remrun command on remote host
+            HOST_LENGTH=${#HOST}
+            HOST_LENGTH=$((HOST_LENGTH + 1))
+            HOSTS=$(echo $HOSTS | cut -c $HOST_LENGTH-)
+
+            ssh $USERNAME@$HOST -n -o ConnectTimeout=500 \
+                "/tmp/$(basename $0) -u $USERNAME -m hop -o '$HOSTS' -c '$COMMAND' </dev/null >/tmp/remrun.log 2>&1 &"
         fi
-
-        # copy script to remote machine
-        scp -q $0 $USERNAME@$HOST:/tmp
-
-        # execute remrun command on remote host
-        HOST_LENGTH=${#HOST}
-        HOST_LENGTH=$((HOST_LENGTH + 1))
-
-        ssh $USERNAME@$HOST -n -o ConnectTimeout=500 \
-            "/tmp/$(basename $0) -u $USERNAME -m hop -o '$HOSTS' -c '$COMMAND' </dev/null >/tmp/remrun.log 2>&1 &"
 
         # cleanup by deleting script
         rm  $0
