@@ -2,41 +2,48 @@
 
 USAGE="USAGE $(basename $0) [COMMAND]
 COMMANDS:
-    help
-    init | initialize
-    mod | module
-    proc | process
-    var | variable"
+    help                                display this menu
+    (init | initialize)                 initialize scripter environment
+    (mod | module) <SUBCOMMAND>         perform module operations
+    (proc | process) <SUBCOMMAND>       perform process operations
+    (var | variable) <SUBCOMMAND>       perform variable operations"
 
-MODUSAGE="USAGE $(basename $0) (mod|module) [COMMAND]
-COMMANDS:
-    help
-    list
-    run
-    show"
+MODUSAGE="USAGE $(basename $0) (mod|module) [SUBCOMMAND]
+SUBCOMMANDS:
+    help                    display this menu
+    list                    list available modules
+    run <module-name>       run the specified module
+    show <module-name>      show information on the specified module"
 
-PROCUSAGE="USAGE $(basename $0) (proc|process) [COMMAND]
-COMMANDS:
-    help
-    kill
-    list
-    show"
+PROCUSAGE="USAGE $(basename $0) (proc|process) [SUBCOMMAND]
+SUBCOMMANDS:
+    clear                   untrack all current processes
+    help                    display this menu
+    kill <process-id>       terminate the specified process
+    list                    list all processes
+    show <process-id>       show information on the specified process"
 
-VARUSAGE="USAGE $(basename $0) (var|variable) [COMMAND]
-COMMANDS:
-    clear
-    get
-    help
-    list
-    set
-    unset"
+VARUSAGE="USAGE $(basename $0) (var|variable) [SUBCOMMAND]
+SUBCOMMANDS:
+    clear                   unset all variables
+    get <name>              retrieve the value for a specified variable
+    help                    display this menu
+    list                    list all set variables
+    set <name> <value>      set the value for a specified variable
+    unset <name>            unset the value for a specified variable"
 
 # initialize instance variables
 BASEDIR="$HOME/.$(basename $0)"
 LOGDIR="$BASEDIR/log"
 MODDIR="$BASEDIR/modules"
-PROCESSFILE="$BASEDIR/processfile"
+PROCFILE="$BASEDIR/procfile"
 VARFILE="$BASEDIR/varfile"
+
+PLFMT="%-15s%-30s%-20s%-5s\n"
+PLDIVLEN=72
+MLFMT="%-30s%-60s%-5s\n"
+MLDIVLEN=100
+# TODO - VLFMT
 
 # define helper functions
 get_json() {
@@ -67,7 +74,7 @@ case "$1" in
         # create modules and log directories
         [ ! -d $MODDIR ] && mkdir -p $MODDIR
         [ ! -d $LOGDIR ] && mkdir -p $LOGDIR
-        [ ! -f $PROCESSFILE ] && touch $PROCESSFILE
+        [ ! -f $PROCFILE ] && touch $PROCFILE
         [ ! -f $VARFILE ] && touch $VARFILE
         ;;
     mod|module)
@@ -78,8 +85,8 @@ case "$1" in
                 exit 0
                 ;;
             list)
-                printf "%-30s%-60s%-5s\n" "name" "description" "background"
-                echo "----------------------------------------------------------------------------------------------------"
+                printf "$MLFMT" "name" "description" "background"
+                printf "%.0s-" $(seq 1 $MLDIVLEN); printf "\n"
 
                 # iterate over script json configuration files
                 for CONFIGFILE in $(find $MODDIR -name "*.js"); do
@@ -96,7 +103,7 @@ case "$1" in
                     DESCRIPTION=$(get_json "$JSON" "description")
                     BACKGROUND=$(get_json "$JSON" "background")
 
-                    printf "%-30s%-60s%-5s\n" "$NAME" "$DESCRIPTION" "$BACKGROUND"
+                    printf "$MLFMT" "$NAME" "$DESCRIPTION" "$BACKGROUND"
                 done
                 ;;
             run)
@@ -152,7 +159,7 @@ case "$1" in
                             >$LOGDIR/$PID.log 2>&1 &
 
                         echo "$PID $! $(date +%Y.%m.%d-%H:%M) \
-                            $3 $OPTIONSTRING" >> $PROCESSFILE
+                            $3 $OPTIONSTRING" >> $PROCFILE
                         echo "executed as pid $PID"
                         ;;
                     false)
@@ -186,6 +193,10 @@ case "$1" in
     proc|process)
         # execute subcommand
         case "$2" in
+            clear)
+                cat /dev/null > $PROCFILE
+                rm $LOGDIR/*
+                ;;
             help)
                 printf "$PROCUSAGE\n"
                 exit 0
@@ -196,26 +207,26 @@ case "$1" in
                     echo "the 'kill' command requires one argument" && exit 1
 
                 # kill process
-                cat $PROCESSFILE | grep "^$3 " | awk '{print $3}' | xargs kill
+                cat $PROCFILE | grep "^$3 " | awk '{print $3}' | xargs kill
                 ;;
             list)
-                printf "%-15s%-30s%-20s%-5s\n" "pid" "name" "timestamp" "running"
-                echo "------------------------------------------------------------------------"
+                printf "$PLFMT" "pid" "name" "timestamp" "running"
+                printf "%.0s-" $(seq 1 $PLDIVLEN); printf "\n"
 
-                # iterate over PROCESSFILE
+                # iterate over PROCFILE
                 while read LINE; do
                     ARRAY=($LINE)
                     RUNNING=$(is_pid_running ${ARRAY[1]})
-                    printf "%-15s%-30s%-20s%-5s\n" "${ARRAY[0]}" \
+                    printf "$PLFMT" "${ARRAY[0]}" \
                         "${ARRAY[3]}" "${ARRAY[2]}" "$RUNNING"
-                done < $PROCESSFILE
+                done < $PROCFILE
                 ;;
             show)
                 # check argument length
                 (( $# != 3 )) && \
                     echo "the 'show' command requires one argument" && exit 1
 
-                LINE=$(cat $PROCESSFILE | grep "^$3 ")
+                LINE=$(cat $PROCFILE | grep "^$3 ")
                 if [ ! -z "$LINE" ]; then
                     ARRAY=($LINE)
                     RUNNING=$(is_pid_running ${ARRAY[1]})
@@ -240,8 +251,7 @@ case "$1" in
         # execute subcommand
         case "$2" in
             clear)
-                rm $VARFILE
-                touch $VARFILE
+                cat /dev/null > $VARFILE
                 ;;
             get)
                 # check argument length
@@ -265,10 +275,13 @@ case "$1" in
                 (( $# != 4 )) && \
                     echo "the 'set' command requires two arguments" && exit 1
 
-                # add 'KEY' and 'VALUE' to VARFILE
-                mv $VARFILE $VARFILE.tmp
-                { echo "$3 $4"; cat $VARFILE.tmp; } | sort  > $VARFILE
-                rm $VARFILE.tmp
+                # check if variable already exists
+                cat $VARFILE | grep -q "^$3 " && \
+                    echo "variable '$3' already exists" && exit 1
+
+                # add 'VARIABLE' and 'VALUE' to VARFILE
+                echo "$3 $4" >> $VARFILE
+                sort -o $VARFILE $VARFILE
                 ;;
             unset)
                 # check argument length
@@ -276,9 +289,7 @@ case "$1" in
                     echo "the 'unset' command requires one argument" && exit 1
 
                 # remove row from VARFILE
-                mv $VARFILE $VARFILE.tmp
-                cat $VARFILE.tmp | sed "/^$3*/d" > $VARFILE
-                rm $VARFILE.tmp
+                sed -i "/^$3/d" $VARFILE
                 ;;
             *)
                 printf "$VARUSAGE\n"

@@ -6,7 +6,7 @@ Repository of general-use scripts.
 - backup: backup script that creates tgz archives
 - dotfiles: wrapper script for managing dotfiles using a git repository
 - remrun: remotely execute a command on a cluster of hosts
-- scripter: management framework for script execution
+- scripter: generalized management framework for script execution
 - stash: an encrypted, hierarchical, key-value data store
 
 ## TODO
@@ -15,5 +15,4 @@ Repository of general-use scripts.
 - module: remove 'extension' from configuration file
     - should be able to automagically detect it
 - module: update repositories (use git)
-- process: print off logs
-- variable: check if variable already exists when setting
+- process: view process logs
