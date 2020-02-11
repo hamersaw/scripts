@@ -6,7 +6,7 @@ OPTIONS:
     -c <command>    the command to execute
     -h              display this help menu
     -m <mode>       execution command in specified mode 
-                        ['chain', 'parallel' (default)]
+                        ['chain', 'parallel' (default), 'parallel-bg']
     -o <hosts>      a space delimited list of hosts
     -u <username    username to execute commands"
 }
@@ -97,6 +97,16 @@ case "$MODE" in
             # execute command in background
             (OUTPUT=$(ssh $USERNAME@$HOST -n -o ConnectTimeout=500 $COMMAND 2>&1); \
                 echo -e "--$HOST--\n$OUTPUT") &
+        done
+
+        # wait for all commands to complete
+        wait
+        ;;
+    parallel-bg)
+        # iterate over hosts
+        for HOST in $HOSTS; do
+            # execute command in background
+            (ssh $USERNAME@$HOST -n -o ConnectTimeout=500 "nohup $COMMAND >/tmp/remrun-output.log 2>&1 </dev/null &"; echo -e "--$HOST--") &
         done
 
         # wait for all commands to complete
