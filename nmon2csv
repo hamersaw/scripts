@@ -76,13 +76,13 @@ if __name__ == '__main__':
         # print filename and process file
         print(filename)
 
-        try:
-            # open input and output files
-            in_file = open(filename, 'r')
-            out_filename = join(args.output_dir,
-                basename(filename) + '.csv')
-            out_file = open(out_filename, 'w')
+        # open input and output files
+        in_file = open(filename, 'r')
+        out_filename = join(args.output_dir,
+            basename(filename) + '.csv')
+        out_file = open(out_filename, 'w')
 
+        try:
             # process file
             process_file(in_file, out_file, metrics)
         finally:
