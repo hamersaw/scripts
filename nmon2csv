@@ -2,69 +2,92 @@
 
 import argparse
 from datetime import datetime
-from os import listdir
-from os.path import join
+from os import makedirs
+from os.path import basename, exists, join
 
-def process_file(path, field_names):
-    f = open(path, 'r')
-
-    field_indices = {}
+def process_file(in_file, out_file, metrics):
+    metric_indices = {}
+    header = 'timestamp'
     out_line = ''
-    for line in f:
+    for line in in_file:
         line = line.rstrip() # remove trailing newline character
         array = line.split(",")
 
         if line.startswith('ZZZZ,'):
-            # if 'out_line' has information
+            # if 'out_line' is set -> processing metric reports
             if out_line:
-                print(out_line)
+                out_file.write(out_line + '\n')
+            else:
+                out_file.write(header + '\n')
 
             # parse timestamp and add to out_line
             utc_time = datetime.strptime(array[3] + "T" + array[2], \
                 "%d-%b-%YT%H:%M:%S")
             epoch_time = (utc_time - datetime(1970, 1, 1)).total_seconds()
-            out_line=str(epoch_time)
+            out_line=str(int(epoch_time))
         elif not out_line:
-            # before first record is reported
-            # TODO - comment
-            if array[0] in field_names:
+            # before first metric report
+            if array[0] in metrics:
+                # if metric device is captured -> parse metric field indices
                 indices = []
-                field_indices[array[0]] = indices
+                metric_indices[array[0]] = indices
 
-                # iterate over field names
-                for field_name in field_names[array[0]]:
+                for field_name in metrics[array[0]]:
                     for i, j in enumerate(array):
                         if field_name == j:
                             indices.append(i)
+
+                            # append metric field to header
+                            header += ',' + array[0] + ':' + field_name
         else:
-            if array[0] in field_indices:
-                for index in field_indices[array[0]]:
+            # process metric report
+            if array[0] in metric_indices:
+                for index in metric_indices[array[0]]:
                     out_line+="," + array[index]
 
 if __name__ == '__main__':
     # parse arguments
     parser = argparse.ArgumentParser()
-    parser.add_argument('inputdir', metavar='IN_DIR',
-        help='TODO - description')
-    parser.add_argument('outputdir', metavar='OUT_DIR',
-        help='TODO - description')
-    parser.add_argument('fields', metavar='F', nargs='+',
-        help='TODO - description')
+    parser.add_argument('files', metavar='FILES', nargs='+',
+        help='list of nmon report files.')
+    parser.add_argument('output_dir', metavar='OUT_DIR',
+        help='output directory for generated csv files.')
+    parser.add_argument('-m', '--metrics', action='append',
+        help='nmon report device metric (ex. "DISKREAD:sdd", "MEM:active", "NET:eno1-write-KB/s").')
     args = parser.parse_args()
 
-    # parse field names
-    field_names={}
-    for field in args.fields:
-        array=field.split(':')
+    # parse metrics -> from list (ex. [ 'CPU:User%', 'CPU:Wait' ])
+    # to map (ex. { 'CPU' -> [ 'User%', 'Wait%' ] })
+    metrics={}
+    for metric in args.metrics:
+        array=metric.split(':')
 
-        if array[0] in field_names:
-            field_names[array[0]].append(array[1])
+        if array[0] in metrics:
+            metrics[array[0]].append(array[1])
         else:
-            field_names[array[0]] = [array[1]]
+            metrics[array[0]] = [array[1]]
 
-    # iterate over all files in INDIR
-    for filename in listdir(args.inputdir):
-        # process file
+    # create output directory if it doens't exist
+    if not exists(args.output_dir):
+        makedirs(args.output_dir)
+
+    # iterate over all files in arg.files
+    for filename in args.files:
+        # print filename and process file
         print(filename)
 
-        process_file(join(args.inputdir, filename), field_names)
+        try:
+            # open input and output files
+            in_file = open(filename, 'r')
+            out_filename = join(args.output_dir,
+                basename(filename) + '.csv')
+            out_file = open(out_filename, 'w')
+
+            # process file
+            process_file(in_file, out_file, metrics)
+        finally:
+            # close input and output files
+            if in_file:
+                in_file.close()
+            if out_file:
+                out_file.close()
