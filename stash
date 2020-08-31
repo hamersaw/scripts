@@ -1,0 +1,164 @@
+#!/bin/bash
+
+version="1.0.2"
+usage() {
+    echo "USAGE $(basename $0) [COMMAND]
+COMMANDS:
+    help                display this help menu
+    get <key>           retrieve a value for the specified key
+    init <gpg-username> initailize the stash repository
+    list [subkey]       find all keys containing the specified subkey
+    recover             fix system following a failure
+    set <key> <value>   store the value for the specified key
+    unset <key>         remove values for the key (and all subkeys)
+    version             display the applications version"
+}
+
+stashcode() {
+    # print md5sum hash of value
+    echo "$1" | md5sum | awk '{print $1}'
+}
+
+stashfile() {
+    # print first character of 'stashcode' + '.gpg'
+    echo "$(stashcode $1 | awk '{print substr($1,1,1)}').gpg"
+}
+
+# check if applications are available
+[ ! $(which gpg) ] && echo "'gpg' not found in users PATH" && exit 1
+
+# initialize instance variables - set stashdir if not already set
+[ -z "$stashdir" ] && stashdir="$HOME/.local/share/stash"
+listfile="$stashdir/listfile.gpg"
+userfile="$stashdir/userfile"
+
+if [ -f $userfile ]; then
+    gpgusername=$(cat $userfile)
+fi
+
+# execute command
+case "$1" in
+    help)
+        usage
+        ;;
+    get)
+        # check argument length
+        (( $# != 2 )) && \
+            echo "the 'get' command requires one argument" && exit 1
+
+        # retrieve 'value' for all 'key's (including subkeys)
+        for key in $(gpg -d -q $listfile | grep "^$2"); do
+            stashfile="$stashdir/$(stashfile $key)"
+            value=$(gpg -d -q $stashfile \
+                | grep "^$(stashcode $key)" | awk '{print $2}')
+
+            echo "$key : $value"
+        done
+
+        ;;
+    init)
+        # check argument length
+        (( $# != 2 )) && \
+            echo "the 'init' command requires one argument" && exit 1
+
+        # validate gpg username
+        [[ ! $(gpg --list-secret-keys | grep $2) ]] \
+            && echo "gpg key '$2' doesn't exist" && exit 1
+
+        # test if stashdir already exists
+        [ -d "$stashdir" ] && \
+            echo "stash directory '$stashdir' already exists" && exit 1
+
+        # create stashdir, listfile, and userfile
+        mkdir -p $stashdir
+        echo "" | sed "/^$/d" | gpg -e -r $2 > $listfile
+        echo "$2" > $userfile
+
+        ;;
+    list)
+        if [[ -z $2 ]]; then
+            # if no second argument -> output all keys
+            gpg -d -q $listfile
+        else
+            # if a second argument -> print only those keys
+            gpg -d -q $listfile | grep "^$2"
+        fi
+
+        ;;
+    recover)
+        # process all '.bak' files
+        for bakfile in $(find $stashdir -name "*.bak"); do
+            file=${bakfile%\.*}
+
+            # replace existing file with bakfile 
+            [ -f $file ] && rm $file
+            mv $bakfile $file
+        done
+
+        ;;
+    set)
+        # check argument length
+        (( $# != 3 )) && \
+            echo "the 'set' command requires two arguments" && exit 1
+
+        # check if 'key' exists in listfile
+        gpg -d -q $listfile | grep -q "^$2$" && \
+            echo "key '$2' already exists" && exit 1
+
+        # initialize stashfile
+        stashfile="$stashdir/$(stashfile $2)"
+        [ ! -f $stashfile ] && echo "" | sed "/^$/d" \
+            | gpg -e -r $gpgusername > $stashfile
+
+        # add 'key value' to stashfile
+        mv $stashfile $stashfile.bak
+        { echo "$(stashcode $2) $3"; gpg -d -q $stashfile.bak; } \
+            | gpg -e -r $gpgusername > $stashfile
+        [ $? -ne 0 ] && echo "failed to add 'key' to stashfile" && exit 1
+
+        # add 'key' to listfile
+        mv $listfile $listfile.bak
+        { echo "$2"; gpg -d -q $listfile.bak; } \
+            | sort | gpg -e -r $gpgusername > $listfile
+        [ $? -ne 0 ] && echo "failed to add 'key' to listfile" && exit 1
+
+        # remove '.bak' files
+        rm $stashfile.bak $listfile.bak
+
+        ;;
+    unset)
+        # check argument length
+        (( $# != 2 )) && \
+            echo "the 'unset' command requires one argument" && exit 1
+
+        # execute on all 'keys' in listfile
+        for key in $(gpg -d -q $listfile | grep "$2"); do
+            # remove key from listfile
+            mv $listfile $listfile.bak
+            gpg -d -q $listfile.bak | sed "/^$key/d" \
+                | gpg -e -r $gpgusername > $listfile
+            [ $? -ne 0 ] && echo "failed to remove 'key' from stashfile" && exit 1
+
+            # remove key from stashfile
+            stashfile="$stashdir/$(stashfile $key)"
+            mv $stashfile $stashfile.bak
+            gpg -d -q $stashfile.bak | sed "/^$(stashcode $key)*/d" \
+                | gpg -e -r $gpgusername > $stashfile
+            [ $? -ne 1 ] && echo "failed to remove 'key' from listfile" && exit 1
+
+            # remove '.bak' files
+            rm $listfile.bak $stashfile.bak
+
+            # if stashfile is empty -> delete
+            [ -z "$(gpg -d -q $stashfile)" ] && rm $stashfile
+        done
+
+        ;;
+    version)
+        echo "v$version"
+        ;;
+    *)
+        usage
+        exit 1
+        ;;
+esac
