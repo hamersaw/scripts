@@ -1,11 +1,12 @@
 #!/bin/bash
 
-version="1.0.2"
+version="1.0.3"
 usage() {
     echo "USAGE $(basename $0) [COMMAND]
 COMMANDS:
-    help                display this help menu
+    clip                copy a key's value to the clipboard
     get <key>           retrieve a value for the specified key
+    help                display this help menu
     init <gpg-username> initailize the stash repository
     list [subkey]       find all keys containing the specified subkey
     recover             fix system following a failure
@@ -26,6 +27,7 @@ stashfile() {
 
 # check if applications are available
 [ ! $(which gpg) ] && echo "'gpg' not found in users PATH" && exit 1
+[ ! $(which xclip) ] && echo "'xclip' not found in users PATH" && exit 1
 
 # initialize instance variables - set stashdir if not already set
 [ -z "$stashdir" ] && stashdir="$HOME/.local/share/stash"
@@ -38,13 +40,30 @@ fi
 
 # execute command
 case "$1" in
-    help)
-        usage
+    clip)
+        # check argument length
+        (( $# != 2 )) && echo "'get' requires one argument" && exit 1
+
+        # validate the keys stashfile exists 
+        stashfile="$stashdir/$(stashfile $2)"
+        if [ ! -f "$stashfile" ]; then
+            echo "stashfile does not exist" && exit 1
+        fi
+
+        # validate key exists
+        value=$(gpg -d -q $stashfile \
+            | grep "^$(stashcode $2)" | awk '{print $2}')
+        if [ -z "$value" ]; then
+            echo "key '$2' does not exist" && exit 1
+        fi
+
+        # copy to clip
+        echo -n "$value" | xclip -selection clipboard
+        $(sleep 5; echo -n "" | xclip -selection clipboard) &
         ;;
     get)
         # check argument length
-        (( $# != 2 )) && \
-            echo "the 'get' command requires one argument" && exit 1
+        (( $# != 2 )) && echo "'get' requires one argument" && exit 1
 
         # retrieve 'value' for all 'key's (including subkeys)
         for key in $(gpg -d -q $listfile | grep "^$2"); do
@@ -54,12 +73,13 @@ case "$1" in
 
             echo "$key : $value"
         done
-
+        ;;
+    help)
+        usage
         ;;
     init)
         # check argument length
-        (( $# != 2 )) && \
-            echo "the 'init' command requires one argument" && exit 1
+        (( $# != 2 )) && echo "'init' requires one argument" && exit 1
 
         # validate gpg username
         [[ ! $(gpg --list-secret-keys | grep $2) ]] \
@@ -73,7 +93,6 @@ case "$1" in
         mkdir -p $stashdir
         echo "" | sed "/^$/d" | gpg -e -r $2 > $listfile
         echo "$2" > $userfile
-
         ;;
     list)
         if [[ -z $2 ]]; then
@@ -83,7 +102,6 @@ case "$1" in
             # if a second argument -> print only those keys
             gpg -d -q $listfile | grep "^$2"
         fi
-
         ;;
     recover)
         # process all '.bak' files
@@ -94,12 +112,10 @@ case "$1" in
             [ -f $file ] && rm $file
             mv $bakfile $file
         done
-
         ;;
     set)
         # check argument length
-        (( $# != 3 )) && \
-            echo "the 'set' command requires two arguments" && exit 1
+        (( $# != 3 )) && echo "'set' requires two arguments" && exit 1
 
         # check if 'key' exists in listfile
         gpg -d -q $listfile | grep -q "^$2$" && \
@@ -124,12 +140,10 @@ case "$1" in
 
         # remove '.bak' files
         rm $stashfile.bak $listfile.bak
-
         ;;
     unset)
         # check argument length
-        (( $# != 2 )) && \
-            echo "the 'unset' command requires one argument" && exit 1
+        (( $# != 2 )) && echo "'unset' requires one argument" && exit 1
 
         # execute on all 'keys' in listfile
         for key in $(gpg -d -q $listfile | grep "$2"); do
@@ -152,7 +166,6 @@ case "$1" in
             # if stashfile is empty -> delete
             [ -z "$(gpg -d -q $stashfile)" ] && rm $stashfile
         done
-
         ;;
     version)
         echo "v$version"
