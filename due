@@ -150,6 +150,7 @@ case "$1" in
             find_element "$2"
 
 		    index=$(( "${2##*.}" + 1 ))
+            [[ ! -z "$parentid" ]] && parentid="$parentid."
             print_element "$parentid" "$index" "$element" "0"
         fi
         ;;
