@@ -149,9 +149,6 @@ case "$1" in
         (( $# != 3 )) && \
             echo "'remove' requires three arguments" && exit 1
 
-        # find element to remove (to ensure it exists)
-        find_element "$2"
-
 		# find src parent element and index
         parent_id "$2"
         find_element "$parentid" 
@@ -170,11 +167,17 @@ case "$1" in
 			echo "invalid index" && exit 1 # TODO - better error msg
         fi
 
+        # check for cyclic dependency
+        find_element "$2"
+        if [[ "$element" == "$dstparent" ]]; then
+            echo "move results in a cyclic relationship" && exit 1
+        fi
+
         # remove element from src parent
 		sed -i "$srcindex d" "$srcparent"
 
         # add element to dst parent
-		childcount=$(wc -l "$dstparent" | awk '{print $1-1}')
+		childcount=$(wc -l "$dstparent" | awk '{print $1}')
 		if [ "$dstindex" -gt "$childcount" ]; then
 			echo "$id" >> "$dstparent"
 		else
