@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version="0.1.1"
+version="0.1.2"
 usage="USAGE $(basename $0) [COMMAND]
 COMMANDS:
     help                        display this help menu
@@ -81,6 +81,12 @@ print_element() {
     fi
 }
 
+validate_id() {
+    if [[ ! "$1" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
+        echo "invalid id '$1'" && exit 1
+    fi
+}
+
 # execute command
 case "$1" in
 	add)
@@ -88,6 +94,7 @@ case "$1" in
         (( $# != 3 )) && echo "'add' requires two arguments" && exit 1
 
 		# find parent element
+        validate_id "$2"
         parent_id "$2"
         find_element "$parentid" 
 
@@ -119,6 +126,7 @@ case "$1" in
         (( $# != 2 )) && echo "'hide' requires one argument" && exit 1
 
         # find element
+        validate_id "$2"
         find_element "$2"
 		id="${element##*\/}"
 
@@ -137,6 +145,7 @@ case "$1" in
 				| xargs head -n 1 -q | awk '{print NR " - " $1}'
         else
             # recursively print element argument
+            validate_id "$2"
             parent_id "$2"
             find_element "$2"
 
@@ -150,6 +159,7 @@ case "$1" in
             echo "'remove' requires three arguments" && exit 1
 
 		# find src parent element and index
+        validate_id "$2"
         parent_id "$2"
         find_element "$parentid" 
 
@@ -158,6 +168,7 @@ case "$1" in
         id=$(head -n $srcindex "$srcparent" | tail -n 1)
 
 		# find dst parent element and index
+        validate_id "$3"
         parent_id "$3"
         find_element "$parentid" 
 
@@ -191,6 +202,7 @@ case "$1" in
         (( $# != 2 )) && echo "'remove' requires one argument" && exit 1
 
         # find element to remove
+        validate_id "$2"
         find_element "$2"
 
         # ensure element has no children
@@ -217,6 +229,7 @@ case "$1" in
         (( $# != 2 )) && echo "'unhide' requires one argument" && exit 1
 
         # find element to remove (to ensure it exists)
+        validate_id "$2"
         find_element "$2"
 		id="${element##*\/}"
 
