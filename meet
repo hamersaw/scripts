@@ -1,0 +1,189 @@
+#!/bin/bash
+
+version="0.1.0"
+usage="USAGE $(basename $0) [COMMAND]
+COMMANDS:
+    add <name> DATE_OPT...      add a new meeting on generated dates
+    get [<date>]                get all meetings on specified date
+    help                        display this help menu
+    list                        list scheduled meetings
+    remove <index>              remove the specified meeting
+
+DATE_OPT:
+    <date>
+        ex. '2020-12-02'
+    <date>/<starttime>/<endtime>
+        ex. '2020-10-01/14:00:00/14:45:00'
+    <startdate>/<starttime>/<endtime>/<dateinterval>/<enddate>
+        ex. '2020-09-14/13:00:00/14:00:00/2 weeks/2020-12-14'"
+
+# initialize instance variables - set dir if not already set
+[ -z "$meetdir" ] && meetdir="$HOME/.local/share/meet"
+lookupfile="$meetdir/lookup"
+timefile="$meetdir/time"
+
+# if doesn't exist -> create base configuration files
+[ ! -d "$meetdir" ] && mkdir -p $meetdir
+[ ! -f "$lookupfile" ] && touch $lookupfile
+[ ! -f "$timefile" ] && touch $timefile
+
+# execute command
+case "$1" in
+    add)
+		# check argument length
+        (( $# < 3 )) && \
+            echo "'add' requires at least two arguments" && exit 1
+
+        # compute a new random id
+		id=$(tr -dc 'A-F0-9' < /dev/urandom \
+            | dd status=none bs=1 count=32)
+
+        # iterate over date arguments
+        for arg in "${@:3}"; do
+            # split argument into fields
+            IFS='/'
+            read -r -a array <<< "$arg"
+
+            # compute starttime and endtime
+            startdate="${array[0]}"
+            starttime="00:00:00"
+            (( "${#array[@]}" >= 3)) && starttime="${array[1]}"
+
+            enddate="${array[0]}"
+            endtime="23:59:59"
+            (( "${#array[@]}" >= 3)) && endtime="${array[2]}"
+
+            if (( "${#array[@]}" == 5 )); then
+                # if reoccuring -> compute subsequent dates
+                maxtime="$(date -d "${array[4]} 23:59:59" "+%s")"
+                # TODO - if failure -> continue
+                
+                #interval=$(( "${array[3]}" * "604800" ))
+                # TODO - if failure -> continue
+
+                meettimestart="$(date -d "$startdate $starttime" "+%s")"
+                # TODO - if failure -> continue
+                while (( "$meettimestart" <= "$maxtime" )); do
+                    meettimeend="$(date -d "$enddate $endtime" "+%s")"
+                    # TODO - if failure -> continue
+
+                    echo "$meettimestart $meettimeend $id" >> "$timefile"
+
+                    # update dates with next interval
+                    startdate="$(date -d "$startdate+${array[3]}" "+%Y-%m-%d")"
+                    # TODO - if failure -> continue
+
+                    enddate="$(date -d "$enddate+${array[3]}" "+%Y-%m-%d")"
+                    # TODO - if failure -> continue
+
+                    meettimestart="$(date -d "$startdate $starttime" "+%s")"
+                    # TODO - if failure -> continue
+                done
+            else
+                meettimestart="$(date -d "$startdate $starttime" "+%s")"
+                # TODO - if failure -> continue
+
+                meettimeend="$(date -d "$enddate $endtime" "+%s")"
+                # TODO - if failure -> continue
+
+                echo "$meettimestart $meettimeend $id" >> "$timefile"
+            fi
+        done
+
+        # TODO - sort timefile?
+
+        echo "$id $2" >> "$lookupfile"
+        echo "[+] added '$2'"
+        ;;
+    get)
+		# check argument length
+        (( $# > 3 )) && \
+            echo "'get' requires at most two arguments" && exit 1
+
+        # initailize instance variables
+        if [[ ! -z "$2" ]]; then
+            datestring="$2"
+        else
+            datestring="$(date +%Y-%m-%d)"
+        fi
+
+        starttime="$(date -d "$datestring 00:00:00" "+%s")"
+        endtime="$(date -d "$datestring 23:59:59" "+%s")"
+
+        # today iterate over the days
+        echo "- $(date -d "@$starttime" "+%Y-%m-%d")"
+        while read line; do
+            meetingstart="$(echo $line | awk '{print $1}')"
+            meetingend="$(echo $line | awk '{print $2}')"
+
+            # check if meeting overlaps today
+            if (( "$starttime" <= "$meetingend" )) \
+                    && (( "$endtime" >= "$meetingstart" )); then
+                # print meeting information
+                id="$(echo $line | awk '{print $3}')"
+                meeting="$(cat $lookupfile | grep "$id" \
+                    | awk '{$1=""; print $0}')"
+                # TODO - remove beginning ' ' on meeting
+
+                startdate="$(date -d "@$meetingstart" "+%H:%M:%S")"
+                enddate="$(date -d "@$meetingend" "+%H:%M:%S")"
+                echo "    -$meeting: $startdate - $enddate"
+            fi
+        done <"$timefile"
+        ;;
+    help)
+        echo "$usage"
+        ;;
+    list)
+		# check argument length
+        (( $# != 1)) && echo "'list' requires zero arguments" && exit 1
+
+        # print all boards
+        count=1
+        while read lookupline; do
+            # print meeting title
+            id="$(echo $lookupline | awk '{print $1}')"
+            echo "$count -$(echo $lookupline | awk '{$1=""; print $0}')"
+            
+            # print meeting time
+            while read timeline; do
+                meetingstart="$(echo $timeline | awk '{print $1}')"
+                startdate="$(date -d "@$meetingstart" "+%Y-%m-%d %H:%M:%S")"
+
+                meetingend="$(echo $timeline | awk '{print $2}')"
+                enddate="$(date -d "@$meetingend" "+%Y-%m-%d %H:%M:%S")"
+                
+                echo "    $startdate - $enddate"
+            done < <(cat "$timefile" | grep "$id")
+
+            count=$(( $count + 1 ))
+        done <"$lookupfile"
+        ;;
+    remove)
+		# check argument length
+        (( $# != 2)) && echo "'remove' requires one argument" && exit 1
+
+        # validate removal index
+        childcount=$(wc -l "$lookupfile" | awk '{print $1}')
+        if (( "$2" > "0" )) && (( "$2" <= "$childcount" )); then
+            # remove meeting from timefile
+            id=$(head -n $2 "$lookupfile" \
+                | tail -n 1 | awk '{print $1}')
+            sed -i "/$id/d" "$timefile"
+
+            # remove meeting from lookupfile
+		    sed -i "$2 d" "$lookupfile"
+		else
+			echo "invalid index" && exit 1 # TODO better error msg
+		fi
+
+        echo "[-] removed 'TODO'"
+        ;;
+    version)
+        echo "v$version"
+        ;;
+    *)
+        echo "$usage"
+        exit 1
+        ;;
+esac
