@@ -4,9 +4,9 @@ version="0.1.0"
 usage="USAGE $(basename $0) [COMMAND]
 COMMANDS:
     add <name> DATE_OPT...      add a new meeting on generated dates
-    get [<date>]                get all meetings on specified date
+    get [<date>]                view all meetings on the specified date
     help                        display this help menu
-    list                        list scheduled meetings
+    list [index]                list all scheduled meetings
     remove <index>              remove the specified meeting
 
 DATE_OPT:
@@ -58,9 +58,6 @@ case "$1" in
                 maxtime="$(date -d "${array[4]} 23:59:59" "+%s")"
                 # TODO - if failure -> continue
                 
-                #interval=$(( "${array[3]}" * "604800" ))
-                # TODO - if failure -> continue
-
                 meettimestart="$(date -d "$startdate $starttime" "+%s")"
                 # TODO - if failure -> continue
                 while (( "$meettimestart" <= "$maxtime" )); do
@@ -107,45 +104,67 @@ case "$1" in
             datestring="$(date +%Y-%m-%d)"
         fi
 
-        starttime="$(date -d "$datestring 00:00:00" "+%s")"
-        endtime="$(date -d "$datestring 23:59:59" "+%s")"
+        # get first day of week
+        dayofweek="$(date -d "$datestring" "+%u")"
+        # TODO - if failure -> exit
 
-        # today iterate over the days
-        echo "- $(date -d "@$starttime" "+%Y-%m-%d")"
-        while read line; do
-            meetingstart="$(echo $line | awk '{print $1}')"
-            meetingend="$(echo $line | awk '{print $2}')"
+        dayofweek=$(( $dayofweek - 1 ))
+        datestring="$(date -d "$datestring-$dayofweek days" "+%Y-%m-%d")"
+        # TODO - if failure -> exit
 
-            # check if meeting overlaps today
-            if (( "$starttime" <= "$meetingend" )) \
-                    && (( "$endtime" >= "$meetingstart" )); then
-                # print meeting information
-                id="$(echo $line | awk '{print $3}')"
-                meeting="$(cat $lookupfile | grep "$id" \
-                    | awk '{$1=""; print $0}')"
-                # TODO - remove beginning ' ' on meeting
+        # iterate over week
+        for i in $(seq 0 6); do
+            starttime="$(date -d "$datestring 00:00:00" "+%s")"
+            endtime="$(date -d "$datestring 23:59:59" "+%s")"
 
-                startdate="$(date -d "@$meetingstart" "+%H:%M:%S")"
-                enddate="$(date -d "@$meetingend" "+%H:%M:%S")"
-                echo "    -$meeting: $startdate - $enddate"
-            fi
-        done <"$timefile"
+            # today iterate over the days
+            echo "- $(date -d "@$starttime" "+%A, %B %d %Y")"
+            # TODO - if failure -> exit
+            while read line; do
+                meetingstart="$(echo $line | awk '{print $1}')"
+                meetingend="$(echo $line | awk '{print $2}')"
+
+                # check if meeting overlaps today
+                if (( "$starttime" <= "$meetingend" )) \
+                        && (( "$endtime" >= "$meetingstart" )); then
+                    # print meeting information
+                    id="$(echo $line | awk '{print $3}')"
+                    meeting="$(cat $lookupfile | grep "$id" \
+                        | awk '{$1=""; print $0}')"
+                    # TODO - remove beginning ' ' on meeting
+
+                    startdate="$(date -d "@$meetingstart" "+%H:%M:%S")"
+                    # TODO - if failure -> exit
+                    enddate="$(date -d "@$meetingend" "+%H:%M:%S")"
+                    # TODO - if failure -> exit
+
+                    echo "    -$meeting: $startdate - $enddate"
+                fi
+            done <"$timefile"
+
+            datestring="$(date -d "$datestring+1 day" "+%Y-%m-%d")"
+        done
         ;;
     help)
         echo "$usage"
         ;;
     list)
 		# check argument length
-        (( $# != 1)) && echo "'list' requires zero arguments" && exit 1
+        (( $# > 2 )) && \
+            echo "'list' requires zero or one argument(s)" && exit 1
 
-        # print all boards
-        count=1
-        while read lookupline; do
-            # print meeting title
-            id="$(echo $lookupline | awk '{print $1}')"
-            echo "$count -$(echo $lookupline | awk '{$1=""; print $0}')"
+        if [[ $# != 2 ]]; then
+            # if no element argument -> print all meetings
+            cat "$lookupfile" | awk '{$1=""; print NR " -" $0}'
+        else
+            # print meeting
+            id="$(head -n $2 "$lookupfile" \
+                | tail -n 1 | awk '{print $1}')"
             
-            # print meeting time
+            name="$(head -n $2 "$lookupfile" \
+                | tail -n 1 | awk '{$1=""; print $0}')"
+
+            echo "$2 -$name"
             while read timeline; do
                 meetingstart="$(echo $timeline | awk '{print $1}')"
                 startdate="$(date -d "@$meetingstart" "+%Y-%m-%d %H:%M:%S")"
@@ -155,9 +174,7 @@ case "$1" in
                 
                 echo "    $startdate - $enddate"
             done < <(cat "$timefile" | grep "$id")
-
-            count=$(( $count + 1 ))
-        done <"$lookupfile"
+        fi
         ;;
     remove)
 		# check argument length
