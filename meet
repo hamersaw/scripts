@@ -1,7 +1,7 @@
 #!/bin/bash
 
 version="0.1.1"
-usage="USAGE $(basename $0) [COMMAND]
+usage="USAGE: $(basename $0) [COMMAND]
 COMMANDS:
     add <name> DATE_OPT...  add a new meeting on generated dates
     chart [<date>]          chart the week surrounding a specified date
@@ -16,6 +16,12 @@ DATE_OPT:
         ex. '2020-10-01/14:00:00/14:45:00'
     <startdate>/<starttime>/<endtime>/<dateinterval>/<enddate>
         ex. '2020-09-14/13:00:00/14:00:00/2 weeks/2020-12-14'"
+
+# load commands from library
+. library.sh
+
+# check if applications are available
+! inPath date && echo "'date' not found in users PATH" && exit 1
 
 # initialize instance variables - set dir if not already set
 [ -z "$meetdir" ] && meetdir="$HOME/.local/share/meet"
