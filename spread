@@ -1,5 +1,6 @@
 #!/bin/bash
 
+version="0.1.0"
 usage="USAGE: $(basename $0) [OPTIONS..] COMMAND
 COMMAND:
     chain <hosts> <cmd>         initalize sequential execution
@@ -7,6 +8,7 @@ COMMAND:
     hop <hosts> <cmd>           internal stage for 'chain' COMMAND
     parallel <hosts> <cmd>      perform execution in parallel
     parallel-bg <hosts> <cmd>   execute cmd in background in parallel
+    version                     display the applications version
 OPTIONS:
     -u <username                username to execute commands"
 
@@ -23,10 +25,6 @@ while getopts "u:" opt; do
             ;;
     esac
 done
-
-# TODO trim leading and ending spaces from hosts string
-#HOSTS=${HOSTS##*( )}
-#HOSTS=${HOSTS%%*( )}
 
 # execute command
 case "${@:$OPTIND:1}" in
@@ -60,13 +58,17 @@ case "${@:$OPTIND:1}" in
         cmd=${@:$OPTIND+2:1}
         [[ -z "$cmd" ]] && echo "'hop' requires two arguments" && exit 1
 
+        # trim leading and ending spaces from hosts
+        hosts=${hosts##*( )}
+        hosts=${hosts%%*( )}
+
         # execute the command
         eval $cmd >/tmp/remrun-output.log 2>&1
 
         # retrieve first host
         host="$(echo $hosts | awk '{print $1;}')"
 
-        # if HOST exists -> execute on next 'hop'
+        # if host exists -> execute on next 'hop'
         if [[ ! -z $host ]]; then
             # copy script to remote machine
             scp -q $0 $username@$host:/tmp
@@ -115,6 +117,9 @@ case "${@:$OPTIND:1}" in
 
         # wait for all commands to complete
         wait
+        ;;
+    version)
+        echo "v$version"
         ;;
     *)
         echo "$usage"
