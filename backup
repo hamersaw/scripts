@@ -24,7 +24,7 @@ validate_dirs() {
         [ ! -d "$HOME/$dir" ] && \
             echo "directory '$HOME/$dir' does not exist" && exit 1
 
-        dirs+="$dir"
+        dirs+=" $dir"
     done
 }
 
@@ -43,6 +43,8 @@ case "$1" in
 
         # create a gzipped tar archive with the specified directories
         tar -czf "$tarfile" -C "$HOME" ${dirs[*]}
+
+        #echo ${dirs[*]}
         ;;
     help)
         echo "$usage"
