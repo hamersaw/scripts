@@ -1,0 +1,123 @@
+#!/bin/bash
+
+usage="USAGE: $(basename $0) [OPTIONS..] COMMAND
+COMMAND:
+    chain <hosts> <cmd>         initalize sequential execution
+    help                        display this menu
+    hop <hosts> <cmd>           internal stage for 'chain' COMMAND
+    parallel <hosts> <cmd>      perform execution in parallel
+    parallel-bg <hosts> <cmd>   execute cmd in background in parallel
+OPTIONS:
+    -u <username                username to execute commands"
+
+# retrieve opts
+username=$(whoami)
+while getopts "u:" opt; do
+    case $opt in
+        u)
+            username=$OPTARG
+            ;;
+        ?)
+            echo "$usage"
+            exit 1
+            ;;
+    esac
+done
+
+# TODO trim leading and ending spaces from hosts string
+#HOSTS=${HOSTS##*( )}
+#HOSTS=${HOSTS%%*( )}
+
+# execute command
+case "${@:$OPTIND:1}" in
+    chain)
+        # parse arguments
+        hosts=${@:$OPTIND+1:1}
+        cmd=${@:$OPTIND+2:1}
+        [[ -z "$cmd" ]] && \
+            echo "'chain' requires two arguments" && exit 1
+        
+        # retrieve first host - if no host then exit
+        host="$(echo $hosts | awk '{print $1;}')"
+        if [[ -z $host ]]; then
+            exit 0
+        fi
+
+        # copy script to remote machine
+        scp -q $0 $username@$host:/tmp
+
+        # execute remrun command on remote host
+        hostlength=${#host}
+        hostlength=$((hostlength + 2))
+        hosts=$(echo $hosts | cut -c $hostlength-)
+
+        ssh $username@$host -n -o ConnectTimeout=500 \
+            "/tmp/$(basename $0) -u $username hop '$hosts' '$cmd' </dev/null >/tmp/remrun.log 2>&1 &"
+        ;;
+    hop)
+        # parse arguments
+        hosts=${@:$OPTIND+1:1}
+        cmd=${@:$OPTIND+2:1}
+        [[ -z "$cmd" ]] && echo "'hop' requires two arguments" && exit 1
+
+        # execute the command
+        eval $cmd >/tmp/remrun-output.log 2>&1
+
+        # retrieve first host
+        host="$(echo $hosts | awk '{print $1;}')"
+
+        # if HOST exists -> execute on next 'hop'
+        if [[ ! -z $host ]]; then
+            # copy script to remote machine
+            scp -q $0 $username@$host:/tmp
+
+            # execute remrun command on remote host
+            hostlength=${#host}
+            hostlength=$((hostlength + 1))
+            hosts=$(echo $hosts | cut -c $hostlength-)
+
+            ssh $username@$host -n -o ConnectTimeout=500 \
+                "/tmp/$(basename $0) -u $username hop '$hosts' '$cmd' </dev/null >/tmp/remrun.log 2>&1 &"
+        fi
+
+        # cleanup by deleting script
+        rm  $0
+        ;;
+    parallel)
+        # parse arguments
+        hosts=${@:$OPTIND+1:1}
+        cmd=${@:$OPTIND+2:1}
+        [[ -z "$cmd" ]] && \
+            echo "'parallel' requires two arguments" && exit 1
+
+        # iterate over hosts
+        for host in $hosts; do
+            # execute command in background
+            (output=$(ssh $username@$host -n -o ConnectTimeout=500 $cmd 2>&1); \
+                echo -e "--$host--\n$output") &
+        done
+
+        # wait for all commands to complete
+        wait
+        ;;
+    parallel-bg)
+        # parse arguments
+        hosts=${@:$OPTIND+1:1}
+        cmd=${@:$OPTIND+2:1}
+        [[ -z "$cmd" ]] && \
+            echo "'parallel-bg' requires two arguments" && exit 1
+
+        # iterate over hosts
+        for host in $hosts; do
+            # execute command in background
+            (ssh $username@$host -n -o ConnectTimeout=500 "nohup $cmd >/tmp/remrun-output.log 2>&1 </dev/null &"; echo -e "--$host--") &
+        done
+
+        # wait for all commands to complete
+        wait
+        ;;
+    *)
+        echo "$usage"
+        exit 1
+        ;;
+esac
