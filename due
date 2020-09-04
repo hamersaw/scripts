@@ -1,8 +1,8 @@
 #!/bin/bash
 
 version="0.1.2"
-usage="USAGE: $(basename $0) [COMMAND]
-COMMANDS:
+usage="USAGE: $(basename $0) COMMAND
+COMMAND:
     help                        display this help menu
     add <element> <title>       add an element at the desired location
     hide <element>              mark an element as hidden

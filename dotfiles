@@ -3,8 +3,8 @@
 # reference - https://news.ycombinator.com/item?id=11071754
 
 version="0.1.0"
-usage="USAGE: $(basename $0) [COMMAND]
-COMMANDS:
+usage="USAGE: $(basename $0) COMMAND
+COMMAND:
     help                display this help menu
     clone <git-repo>    clone an existing dotfiles repository
     init                initailize a new dotfiles repository
@@ -46,14 +46,14 @@ case "$1" in
     *)
         # wrap arguments containing a space in double quotes
         args=()
-        for ARG in "$@"; do
-            case "$ARG" in
+        for arg in "$@"; do
+            case "$arg" in
                 *\ * )
-                    args+=("\"$ARG\"")
+                    args+=("\"$arg\"")
 
                     ;;
                 * )
-                    args+=($ARG)
+                    args+=($arg)
 
                     ;;
             esac

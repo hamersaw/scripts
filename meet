@@ -1,8 +1,8 @@
 #!/bin/bash
 
 version="0.1.1"
-usage="USAGE: $(basename $0) [COMMAND]
-COMMANDS:
+usage="USAGE: $(basename $0) COMMAND
+COMMAND:
     add <name> DATE_OPT...  add a new meeting on generated dates
     chart [<date>]          chart the week surrounding a specified date
     help                    display this help menu

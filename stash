@@ -1,8 +1,8 @@
 #!/bin/bash
 
 version="1.0.3"
-usage="USAGE: $(basename $0) [COMMAND]
-COMMANDS:
+usage="USAGE: $(basename $0) COMMAND
+COMMAND:
     clip                copy a key's value to the clipboard
     get <key>           retrieve a value for the specified key
     help                display this help menu
