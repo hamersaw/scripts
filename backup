@@ -1,17 +1,15 @@
 #!/bin/bash
 
-usage() {
-    echo "USAGE $(basename $0) [COMMAND]
-COMMANDS:
-    full                process all files
-    help                display this help menu
-    mod <timestamp>     process files modified since <timestamp>
-                            [ex. 201901011200]"
-}
+version="0.1.0"
+usage="USAGE: $(basename $0) COMMAND
+COMMAND:
+    full DIRS...            create an archive of all specified directories
+    help                    display this help menu
+    mod <date> DIRS...      process files modified since specified date
+    version                 display the application version"
 
 # initialize instance variables
-OUTPUT_DIRECTORY="/tmp"
-BACKUP_DIRECTORIES=( "Desktop" "Documents" "Pictures" )
+tmpdir="/tmp"
 
 # load configuration and command library scripts
 . library.sh
@@ -19,48 +17,72 @@ BACKUP_DIRECTORIES=( "Desktop" "Documents" "Pictures" )
 # check if applications are available
 ! inPath tar && echo "'tar' not found in users PATH" && exit 1
 
+validate_dirs() {
+    dirs=()
+    for dir in "$@"; do
+        # ensure directory exists
+        [ ! -d "$HOME/$dir" ] && \
+            echo "directory '$HOME/$dir' does not exist" && exit 1
+
+        dirs+="$dir"
+    done
+}
+
 # execute command
 case "$1" in
     full)
-        # initialize instance variables
-        BACKUP_FILENAME="$OUTPUT_DIRECTORY/$USER-$(hostname)-$(date +%Y%m%d%H%M).tgz"
+        # check argument length
+        (( $# < 2 )) && \
+            echo "the 'full' command requires at least one argument" && exit 1
 
-        # create a gzipped tar archive with all files
-        tar -czf $BACKUP_FILENAME -C $HOME ${BACKUP_DIRECTORIES[*]}
+        # validate directories
+        validate_dirs "${@:2}"
+
+        # initialize instance variables
+        tarfile="$tmpdir/$USER-$(hostname)-$(date +%Y%m%d%H%M)-full.tgz"
+
+        # create a gzipped tar archive with the specified directories
+        tar -czf "$tarfile" -C "$HOME" ${dirs[*]}
         ;;
     help)
-        usage
+        echo "$usage"
         exit 0
         ;;
     mod)
         # check argument length
-        (( $# != 2 )) && \
-            echo "the 'mod' command requires one argument" && exit 1
+        (( $# < 3 )) && \
+            echo "the 'mod' command requires at least two arguments" && exit 1
+
+        # validate directories
+        validate_dirs "${@:3}"
 
         # initialize instance variables
-        BACKUP_FILENAME="$OUTPUT_DIRECTORY/$USER-$(hostname)-$2-$(date +%Y%m%d%H%M).tgz"
-        TIMESTAMP_FILENAME="$OUTPUT_DIRECTORY/timestamp"
-        MODIFIED_FILENAME="$OUTPUT_DIRECTORY/modified.txt"
-        HOME_PREFIX_LEN=`echo "$HOME/" | wc -c`
+        tarfile="$tmpdir/$USER-$(hostname)-$(date +%Y%m%d%H%M)-mod-$2.tgz"
+        timestampfile="$tmpdir/backup-timestamp"
+        modifiedfile="$tmpdir/modified.txt"
+        homeprefixlen=$(echo "$HOME/" | wc -c)
 
-        # create timestamp
-        touch -t $2 $TIMESTAMP_FILENAME
-        (( $? )) && exit 1
+        # create timestampfile
+        touch -t $2 "$timestampfile"
+        (( "$?" )) && exit 1
 
         # find all files modified since CHANGE_TIMESTMAP
-        for DIRECTORY in "${BACKUP_DIRECTORIES[@]}"; do
-            find $HOME/$DIRECTORY -type f -newer $TIMESTAMP_FILENAME -print \
-                | cut -c$HOME_PREFIX_LEN- >> $MODIFIED_FILENAME
+        for dir in "${dirs[@]}"; do
+            find  "$HOME/$dir" -type f -newer "$timestampfile" -print \
+                | cut -c$homeprefixlen- >> "$modifiedfile"
         done
 
         # create a gzipped tar archive with modified files
-        tar -czf $BACKUP_FILENAME -C $HOME `cat $MODIFIED_FILENAME`
+        tar -czf "$tarfile" -C "$HOME" $(cat $modifiedfile)
 
         # clean up temporary files
-        rm $TIMESTAMP_FILENAME $MODIFIED_FILENAME
+        rm "$timestampfile" "$modifiedfile"
+        ;;
+    version)
+        echo "v$version"
         ;;
     *)
-        usage
+        echo "$usage"
         exit 1
         ;;
 esac
