@@ -69,7 +69,7 @@ move_element() {
 
     dstindex="${2##*.}"
     dstparent="$element"
-    if [ "$dstindex" -le "1" ]; then
+    if [ "$dstindex" -le "0" ]; then
         echo "invalid index" && exit 1 # TODO - better error msg
     fi
 
@@ -99,43 +99,6 @@ parent_id() {
     else
         parentid=""
     fi
-}
-
-print_element() {
-    # ensure element exists
-    validate_id "$1"
-    find_element "$1" 
-
-    # find parent element
-    parent_id "$1"
-    find_element "$parentid" 
-
-    # call recursive print
-    local index=$(( "${1##*.}" ))
-    [[ ! -z "$parentid" ]] && parentid="$parentid."
-    print_recurse "$idlevel" "$parentid" "$index" "$element"
-}
-
-print_recurse() {
-    # print this element
-    local title=$(head -n $3 "$4" | tail -n 1 \
-        | awk '{$1=""; print substr($0,2)}')
-    echo "$2$3 - $title"
-
-    # if element is leaf -> return
-    if [ "$(( $1 + 1 ))" -ge "${#levels[@]}" ]; then
-        return
-    fi
-
-    # print all children
-    local uuid=$(head -n $3 "$4" | tail -n 1 | awk '{print $1}')
- 
-    local count=1
-    while read line; do
-        print_recurse $(( $1 + 1 )) "    $2$3." \
-            "$count" "$datadir/$uuid"
-        local count=$(( count + 1 ))
-    done <"$datadir/$uuid"
 }
 
 remove_element() {

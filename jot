@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version="0.1.0"
+version="0.1.1"
 usage="USAGE: $(basename $0) COMMAND
 COMMAND:
     help                        display this help menu
@@ -110,7 +110,6 @@ case "$1" in
             index="${2##*.}"
             [[ ! -z "$parentid" ]] && parentid="$parentid."
             print_element "$idlevel" "$parentid" "$index" "$element"
-            #print_element "$2"
         fi
         ;;
     move)
