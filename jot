@@ -14,7 +14,7 @@ COMMAND:
 # load commands from element library
 . element.sh
 
-# initialize instance variables - set jotdir if not already set
+# initialize instance variables
 datadir="$HOME/.local/share/jot"
 gatefile="$datadir/gatefile"
 levels=( "journal" "note" )
@@ -37,7 +37,7 @@ case "$1" in
         # if leaf element -> edit
         id_level "$2"
         if [ "$(( $idlevel + 1 ))" -ge "${#levels[@]}" ]; then
-            vim "$datadir/$uuid"
+            vim -c ":set syntax=markdown" "$datadir/$uuid"
         fi
 
 	    echo "[+] added ${levels[$idlevel]} '$2' '$3'"
@@ -55,7 +55,7 @@ case "$1" in
         fi
 
         find_element "$2" 
-        vim "$element"
+        vim -c "set syntax=markdown" "$element"
         ;;
     help)
         echo "$usage"

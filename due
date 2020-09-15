@@ -1,91 +1,27 @@
 #!/bin/bash
 
-version="0.1.2"
+version="0.1.3"
 usage="USAGE: $(basename $0) COMMAND
 COMMAND:
     help                        display this help menu
     add <element> <title>       add an element at the desired location
-    hide <element>              mark an element as hidden
+    edit <element>              edit an existing element
     list [element]              list all elements
     move <element> <element>    move an element within the same level
     remove <element>            remove the specified element
-    unhide <element>            unmark an element as hidden
     version                     display the application version"
 
-# initialize instance variables - set dir if not already set
-[ -z "$duedir" ] && duedir="$HOME/.local/share/due"
-gatefile="$duedir/gate"
-hidefile="$duedir/hidden"
+# load commands from element library
+. element.sh
+
+# initialize instance variables
+datadir="$HOME/.local/share/due"
+gatefile="$datadir/gatefile"
+levels=( "board" "list" "card" )
 
 # if doesn't exist -> create base configuration files
-[ ! -d "$duedir" ] && mkdir -p $duedir
-[ ! -f "$gatefile" ] && echo "foo" > $gatefile
-[ ! -f "$hidefile" ] && touch $hidefile
-
-find_element() {
-	element="$gatefile"
-
-    # if id is empty -> element is the gatefile
-    if [ -z "$1" ]; then
-        return 0
-    fi
-
-	# parse id
-	IFS='.'
-	read -a array <<< "$1"
-
-	local level=0
-	while [ "$level" -lt "${#array[@]}" ]; do
-		# check if child exists
-		local index=$(( ${array[$level]} + 1 ))
-		local childcount=$(wc -l "$element" | awk '{print $1}')
-		if [ "$index" -le "1" ] || [ "$index" -gt "$childcount" ]; then
-            echo "invalid index" && exit 1 # TODO - better error msg
-		else
-			element="$duedir/$(head -n $index "$element" | tail -n 1)"
-		fi
-
-		local level=$(( $level + 1 ))
-	done
-}
-
-parent_id() {
-    if [[ "$1" == *"."* ]]; then
-        parentid=${1%.*}
-    else
-        parentid=""
-    fi
-}
-
-print_element() {
-    # print this element
-    local index=$(( $2 - 1 ))
-
-    if [ "$4" -eq "1" ]; then
-	    local childcount=$(wc -l "$3" | awk '{print $1-1}')
-        echo "$1$index - $(head -n 1 -q "$3") ($childcount hidden)"
-    else
-        echo "$1$index - $(head -n 1 -q "$3")"
-
-        # print all children
-        local count=2
-        while read line; do
-            local hidden="0"
-            if grep -q "$line" "$hidefile"; then
-                local hidden="1"
-            fi
-
-            print_element "    $1$index." "$count" "$duedir/$line" "$hidden"
-            local count=$(( count + 1 ))
-        done < <(tail -n +2 "$3")
-    fi
-}
-
-validate_id() {
-    if [[ ! "$1" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
-        echo "invalid id '$1'" && exit 1
-    fi
-}
+[ ! -d "$datadir" ] && mkdir -p "$datadir"
+[ ! -f "$gatefile" ] && touch "$gatefile"
 
 # execute command
 case "$1" in
@@ -93,45 +29,30 @@ case "$1" in
 		# check argument length
         (( $# != 3 )) && echo "'add' requires two arguments" && exit 1
 
-		# find parent element
-        validate_id "$2"
-        parent_id "$2"
-        find_element "$parentid" 
-
-        # compute a new random id
-		id=$(tr -dc 'A-F0-9' < /dev/urandom \
+        # add element
+        uuid=$(tr -dc 'A-F0-9' < /dev/urandom \
             | dd status=none bs=1 count=32)
+        add_element "$2" "$uuid" "$3"
 
-		# add element to parent
-		index=$(( "${2##*.}" + 1 ))
-        childcount=$(wc -l "$element" | awk '{print $1-1}')
-		if [ "$index" -le "1" ]; then
-			echo "invalid index" && exit 1 # TODO better error msg
-		elif [ "$index" -gt "$childcount" ]; then
-			echo "$id" >> "$element"
-		else
-			sed -i "$index i $id" "$element"
-		fi
-
-        # create element
-		echo "$3" > "$duedir/$id"
-
-		echo "[+] added element '$2' '$3'"
+	    echo "[+] added ${levels[$idlevel]} '$2' '$3'"
 		;;
+    edit)
+		# check argument length
+        (( $# != 2 )) && echo "'edit' requires one argument" && exit 1
+
+        # validate element
+        validate_id "$2"
+        id_level "$2"
+        if [ "$(( $idlevel + 1 ))" -lt "${#levels[@]}" ]; then
+            echo "only able to edit '${levels[${#levels[@]}-1]}' level" \
+                && exit 1
+        fi
+
+        find_element "$2" 
+        vim "$element"
+        ;;
     help)
         echo "$usage"
-        ;;
-    hide)
-		# check argument length
-        (( $# != 2 )) && echo "'hide' requires one argument" && exit 1
-
-        # find element
-        validate_id "$2"
-        find_element "$2"
-		id="${element##*\/}"
-
-        # add element to hidefile
-        echo "$id" >> "$hidefile"
         ;;
     list)
 		# check argument length
@@ -140,105 +61,28 @@ case "$1" in
 
         if [[ $# != 2 ]]; then
             # if no element argument -> print all boards
-			tail -n +2 $gatefile \
-                | while read line; do echo "$duedir/$line"; done \
-				| xargs head -n 1 -q | awk '{print NR " - " $1}'
+            awk '{$1=""; print NR " - " substr($0,2)}' "$gatefile"
         else
-            # recursively print element argument
-            validate_id "$2"
-            parent_id "$2"
-            find_element "$2"
-
-		    index=$(( "${2##*.}" + 1 ))
-            [[ ! -z "$parentid" ]] && parentid="$parentid."
-            print_element "$parentid" "$index" "$element" "0"
+            print_element "$2"
         fi
         ;;
     move)
-		# check argument length
+        # check argument length
         (( $# != 3 )) && \
             echo "'remove' requires three arguments" && exit 1
 
-		# find src parent element and index
-        validate_id "$2"
-        parent_id "$2"
-        find_element "$parentid" 
-
-		srcindex=$(( "${2##*.}" + 1 ))
-        srcparent="$element"
-        id=$(head -n $srcindex "$srcparent" | tail -n 1)
-
-		# find dst parent element and index
-        validate_id "$3"
-        parent_id "$3"
-        find_element "$parentid" 
-
-		dstindex=$(( "${3##*.}" + 1 ))
-        dstparent="$element"
-		if [ "$dstindex" -le "1" ]; then
-			echo "invalid index" && exit 1 # TODO - better error msg
-        fi
-
-        # check for cyclic dependency
-        find_element "$2"
-        if [[ "$element" == "$dstparent" ]]; then
-            echo "move results in a cyclic relationship" && exit 1
-        fi
-
-        # remove element from src parent
-		sed -i "$srcindex d" "$srcparent"
-
-        # add element to dst parent
-		childcount=$(wc -l "$dstparent" | awk '{print $1}')
-		if [ "$dstindex" -gt "$childcount" ]; then
-			echo "$id" >> "$dstparent"
-		else
-			sed -i "$dstindex i $id" "$dstparent"
-		fi
-
+        move_element "$2" "$3"
 		echo "[|] moved element '$2' to '$3'"
         ;;
     remove)
 		# check argument length
         (( $# != 2 )) && echo "'remove' requires one argument" && exit 1
 
-        # find element to remove
-        validate_id "$2"
-        find_element "$2"
-
-        # ensure element has no children
-		childcount=$(wc -l "$element" | awk '{print $1}')
-		if [ "$childcount" -gt "1" ]; then
-            echo "unable to remove element with children" && exit 1
-        fi
-
-        # remove element
-        rm "$element"
-
-		# find parent element
-        parent_id "$2"
-        find_element "$parentid" 
-
-        # remove element from parent
-		index=$(( "${2##*.}" + 1 ))
-		sed -i "$index d" "$element"
-
+        remove_element "$2"
 		echo "[-] removed element '$2'"
         ;;
-    unhide)
-		# check argument length
-        (( $# != 2 )) && echo "'unhide' requires one argument" && exit 1
-
-        # find element to remove (to ensure it exists)
-        validate_id "$2"
-        find_element "$2"
-		id="${element##*\/}"
-
-        # remove id from hidefile
-        sed -i "/$id/d" "$hidefile"
-        ;;
     version)
-        echo "v$version"
+        echo "$version"
         ;;
     *)
         echo "$usage"
