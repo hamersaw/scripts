@@ -81,7 +81,7 @@ case "$1" in
         rm "$timestampfile" "$modifiedfile"
         ;;
     version)
-        echo "v$version"
+        echo "$version"
         ;;
     *)
         echo "$usage"

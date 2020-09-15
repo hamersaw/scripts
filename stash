@@ -167,7 +167,7 @@ case "$1" in
         done
         ;;
     version)
-        echo "v$version"
+        echo "$version"
         ;;
     *)
         echo "$usage"

@@ -119,7 +119,7 @@ case "${@:$OPTIND:1}" in
         wait
         ;;
     version)
-        echo "v$version"
+        echo "$version"
         ;;
     *)
         echo "$usage"

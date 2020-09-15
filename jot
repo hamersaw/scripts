@@ -23,6 +23,35 @@ levels=( "journal" "note" )
 [ ! -d "$datadir" ] && mkdir -p "$datadir"
 [ ! -f "$gatefile" ] && touch "$gatefile"
 
+datefmt="+%Y-%m-%d %H:%M:%S"
+
+print_element() {
+    # print this element
+    local title=$(head -n $3 "$4" | tail -n 1 \
+        | awk '{$1=""; print substr($0,2)}')
+
+    # if element is leaf -> return
+    if [ "$(( $1 + 1 ))" -ge "${#levels[@]}" ]; then
+        # find modified date
+        modifiedtime=$(stat "$4" | grep 'Modify' \
+            | awk '{$1=""; print substr($0, 2)}')
+        echo "$2$3 - $title ($(date -d "$modifiedtime" "$datefmt"))"
+        return
+    else
+        echo "$2$3 - $title"
+    fi
+
+    # print all children
+    local uuid=$(head -n $3 "$4" | tail -n 1 | awk '{print $1}')
+ 
+    local count=1
+    while read line; do
+        print_element $(( $1 + 1 )) "    $2$3." \
+            "$count" "$datadir/$uuid"
+        local count=$(( count + 1 ))
+    done <"$datadir/$uuid"
+}
+
 # execute command
 case "$1" in
 	add)
@@ -69,7 +98,19 @@ case "$1" in
             # if no element argument -> print all boards
             awk '{$1=""; print NR " - " substr($0,2)}' "$gatefile"
         else
-            print_element "$2"
+            # ensure element exists
+            validate_id "$2"
+            find_element "$2" 
+
+            # find parent element
+            parent_id "$2"
+            find_element "$parentid" 
+
+            # call recursive print
+            index="${2##*.}"
+            [[ ! -z "$parentid" ]] && parentid="$parentid."
+            print_element "$idlevel" "$parentid" "$index" "$element"
+            #print_element "$2"
         fi
         ;;
     move)
@@ -78,14 +119,18 @@ case "$1" in
             echo "'remove' requires three arguments" && exit 1
 
         move_element "$2" "$3"
-		echo "[|] moved element '$2' to '$3'"
+
+        id_level "$2"
+		echo "[|] moved ${levels[$idlevel]} '$2' to '$3'"
         ;;
     remove)
 		# check argument length
         (( $# != 2 )) && echo "'remove' requires one argument" && exit 1
 
         remove_element "$2"
-		echo "[-] removed element '$2'"
+
+        id_level "$2"
+		echo "[-] removed ${levels[$idlevel]} '$2'"
         ;;
     version)
         echo "$version"

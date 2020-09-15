@@ -41,7 +41,7 @@ case "$1" in
             --local status.showUntrackedFiles no
         ;;
     version)
-        echo "v$version"
+        echo "$version"
         ;;
     *)
         # wrap arguments containing a space in double quotes
