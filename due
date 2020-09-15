@@ -58,7 +58,8 @@ print_element() {
     fi
 
     # if element is leaf -> return
-    if [ "$(( $1 + 1 ))" -ge "${#levels[@]}" ]; then
+    id_level "$2"
+    if [ "$(( $idlevel + 1 ))" -ge "${#levels[@]}" ]; then
         return
     fi
 
