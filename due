@@ -50,7 +50,7 @@ print_element() {
     fi
 
     if [ "$1" -ne "0" ] && [ "$hidden" -eq "1" ]; then
-	    local childcount=$(wc -l "$datadir/$uuid" | awk '{print $1}')
+        local childcount=$(wc -l "$datadir/$uuid" | awk '{print $1}')
         echo "$indent$2 - $title ($childcount hidden)"
         return
     else
@@ -73,8 +73,8 @@ print_element() {
 
 # execute command
 case "$1" in
-	add)
-		# check argument length
+    add)
+        # check argument length
         (( $# != 3 )) && echo "'add' requires two arguments" && exit 1
 
         # add element
@@ -82,10 +82,10 @@ case "$1" in
             | dd status=none bs=1 count=32)
         add_element "$2" "$uuid" "$3"
 
-	    echo "[+] added ${levels[$idlevel]} '$2' '$3'"
-		;;
+        echo "[+] added ${levels[$idlevel]} '$2' '$3'"
+        ;;
     edit)
-		# check argument length
+        # check argument length
         (( $# != 2 )) && echo "'edit' requires one argument" && exit 1
 
         # validate element
@@ -103,13 +103,13 @@ case "$1" in
         echo "$usage"
         ;;
     hide)
-		# check argument length
+        # check argument length
         (( $# != 2 )) && echo "'hide' requires one argument" && exit 1
 
         # find element
         validate_id "$2"
         find_element "$2"
-		uuid="${element##*\/}"
+        uuid="${element##*\/}"
 
         # check if card
         id_level "$2"
@@ -120,9 +120,11 @@ case "$1" in
 
         # add element to hidefile
         echo "$uuid" >> "$hidefile"
+
+        echo "[+] hide ${levels[$idlevel]} '$2'"
         ;;
     list)
-		# check argument length
+        # check argument length
         (( $# > 2 )) && \
             echo "'list' requires zero or one argument(s)" && exit 1
 
@@ -145,23 +147,25 @@ case "$1" in
         move_element "$2" "$3"
 
         id_level "$2"
-		echo "[|] moved ${levels[$idlevel]} '$2' to '$3'"
+        echo "[|] moved ${levels[$idlevel]} '$2' to '$3'"
         ;;
     remove)
-		# check argument length
+        # check argument length
         (( $# != 2 )) && echo "'remove' requires one argument" && exit 1
 
+        remove_element "$2"
+
         id_level "$2"
-		echo "[-] removed ${levels[$idlevel]} '$2'"
+        echo "[-] removed ${levels[$idlevel]} '$2'"
         ;;
     unhide)
-		# check argument length
+        # check argument length
         (( $# != 2 )) && echo "'unhide' requires one argument" && exit 1
 
         # find element to remove (to ensure it exists)
         validate_id "$2"
         find_element "$2"
-		uuid="${element##*\/}"
+        uuid="${element##*\/}"
 
         # check if card
         id_level "$2"
@@ -172,6 +176,8 @@ case "$1" in
 
         # remove id from hidefile
         sed -i "/$uuid/d" "$hidefile"
+
+        echo "[-] unhide ${levels[$idlevel]} '$2'"
         ;;
     version)
         echo "$version"

@@ -63,8 +63,8 @@ print_element() {
 
 # execute command
 case "$1" in
-	add)
-		# check argument length
+    add)
+        # check argument length
         (( $# != 3 )) && echo "'add' requires two arguments" && exit 1
 
         # add element
@@ -78,10 +78,10 @@ case "$1" in
             vim -c ":set syntax=markdown" "$datadir/$uuid"
         fi
 
-	    echo "[+] added ${levels[$idlevel]} '$2' '$3'"
-		;;
+        echo "[+] added ${levels[$idlevel]} '$2' '$3'"
+        ;;
     edit)
-		# check argument length
+        # check argument length
         (( $# != 2 )) && echo "'edit' requires one argument" && exit 1
 
         # validate element
@@ -99,7 +99,7 @@ case "$1" in
         echo "$usage"
         ;;
     list)
-		# check argument length
+        # check argument length
         (( $# > 2 )) && \
             echo "'list' requires zero or one argument(s)" && exit 1
 
@@ -122,16 +122,16 @@ case "$1" in
         move_element "$2" "$3"
 
         id_level "$2"
-		echo "[|] moved ${levels[$idlevel]} '$2' to '$3'"
+        echo "[|] moved ${levels[$idlevel]} '$2' to '$3'"
         ;;
     remove)
-		# check argument length
+        # check argument length
         (( $# != 2 )) && echo "'remove' requires one argument" && exit 1
 
         remove_element "$2"
 
         id_level "$2"
-		echo "[-] removed ${levels[$idlevel]} '$2'"
+        echo "[-] removed ${levels[$idlevel]} '$2'"
         ;;
     version)
         echo "$version"

@@ -31,9 +31,9 @@ case "$1" in
         git clone --bare $2 $dotfilesdir
         echo "\ncomplete process with '$(basename $0) checkout'"
         ;;
-	help)
-		echo "$usage"
-		;;
+    help)
+        echo "$usage"
+        ;;
     init)
         # initialize a bare repository
         git init --bare $dotfilesdir

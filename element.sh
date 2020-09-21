@@ -20,31 +20,31 @@ add_element() {
 }
 
 find_element() {
-	element="$gatefile"
+    element="$gatefile"
 
     # if id is empty -> element is the gatefile
     if [ -z "$1" ]; then
         return 0
     fi
 
-	# parse id
-	IFS='.'
-	read -a array <<< "$1"
+    # parse id
+    IFS='.'
+    read -a array <<< "$1"
 
-	local level=0
-	while [ "$level" -lt "${#array[@]}" ]; do
-		# check if child exists
-		local index=$(( ${array[$level]} ))
-		local childcount=$(wc -l "$element" | awk '{print $1}')
-		if [ "$index" -le "0" ] || [ "$index" -gt "$childcount" ]; then
+    local level=0
+    while [ "$level" -lt "${#array[@]}" ]; do
+        # check if child exists
+        local index=$(( ${array[$level]} ))
+        local childcount=$(wc -l "$element" | awk '{print $1}')
+        if [ "$index" -le "0" ] || [ "$index" -gt "$childcount" ]; then
             echo "invalid index" && exit 1 # TODO - better error msg
-		else
-			element="$datadir/$(head -n $index "$element" \
+        else
+            element="$datadir/$(head -n $index "$element" \
                 | tail -n 1 | awk '{print $1}')"
-		fi
+        fi
 
-		local level=$(( $level + 1 ))
-	done
+        local level=$(( $level + 1 ))
+    done
 }
 
 id_level() {
@@ -109,7 +109,7 @@ remove_element() {
     # ensure element has no children
     id_level "$1"
     childcount=$(wc -l "$element" | awk '{print $1}')
-    if [ "$(( $idlevel + 1 ))" -le "${#levels[@]}" ] \
+    if [ "$(( $idlevel + 1 ))" -lt "${#levels[@]}" ] \
             && [ "$childcount" -gt "0" ]; then
         echo "unable to remove element with children" && exit 1
     fi
