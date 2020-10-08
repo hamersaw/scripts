@@ -57,7 +57,7 @@ case "$1" in
 
         # copy to clip
         echo -n "$value" | xclip -selection clipboard
-        $(sleep 5; echo -n "" | xclip -selection clipboard) &
+        $(sleep 3; echo -n "" | xclip -selection clipboard) &
         ;;
     get)
         # check argument length
