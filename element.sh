@@ -52,6 +52,20 @@ id_level() {
     idlevel="${#periodarray}"
 }
 
+join_tags() {
+    for var in "$@"; do
+        if [ -z "$list" ]; then
+            local list="$var"
+        else
+            local list="$list, $var"
+        fi
+    done
+
+    if [ ! -z "$list" ]; then
+        echo "[$list]"
+    fi
+}
+
 move_element() {
     # find src parent element and index
     validate_id "$1"
@@ -116,6 +130,7 @@ remove_element() {
 
     # remove element
     rm "$element"
+    [ -f "$element.md" ] && rm "$element.md"
 
     # find parent element
     parent_id "$1"

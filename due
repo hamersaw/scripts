@@ -1,6 +1,6 @@
 #!/bin/bash
 
-version="0.1.4"
+version="0.1.5"
 usage="USAGE: $(basename $0) COMMAND
 COMMAND:
     help                        display this help menu
@@ -25,6 +25,7 @@ levels=( "board" "list" "card" )
 # if doesn't exist -> create base configuration files
 [ ! -d "$datadir" ] && mkdir -p "$datadir"
 [ ! -f "$gatefile" ] && touch "$gatefile"
+[ ! -f "$hidefile" ] && touch "$hidefile"
 
 print_element() {
     # initialize instance variables
@@ -38,29 +39,33 @@ print_element() {
     local title=$(head -n "$index" "$element" \
         | tail -n 1 | awk '{$1=""; print substr($0,2)}')
 
-    # print element
-    local indent=""
-    for (( i=0; i<$1; i++ )); do
-        local indent="    $indent"
-    done
+    # compile tags
+    local tags=()
+    if [ -f "$datadir/$uuid.md" ]; then
+        tags+=("note")
+    fi
 
     local hidden="0"
     if grep -Fxq "$uuid" "$hidefile"; then
         local hidden="1"
     fi
 
+    # print element
+    local indent=""
+    for (( i=0; i<$1; i++ )); do
+        local indent="    $indent"
+    done
+
     if [ "$1" -ne "0" ] && [ "$hidden" -eq "1" ]; then
         local childcount=$(wc -l "$datadir/$uuid" | awk '{print $1}')
-        echo "$indent$2 - $title ($childcount hidden)"
+        tags+=("$childcount hidden")
+
+        tagstring=$(join_tags "${tags[@]}")
+        echo "$indent$2 $title $tagstring"
         return
     else
-        echo "$indent$2 - $title"
-    fi
-
-    # if element is leaf -> return
-    id_level "$2"
-    if [ "$(( $idlevel + 1 ))" -ge "${#levels[@]}" ]; then
-        return
+        tagstring=$(join_tags "${tags[@]}")
+        echo "$indent$2 $title $tagstring"
     fi
 
     # print children
@@ -90,14 +95,14 @@ case "$1" in
 
         # validate element
         validate_id "$2"
-        id_level "$2"
-        if [ "$(( $idlevel + 1 ))" -lt "${#levels[@]}" ]; then
-            echo "only able to edit '${levels[${#levels[@]}-1]}' level" \
-                && exit 1
-        fi
-
         find_element "$2" 
-        vim -c "set syntax=markdown" "$element"
+
+        vim "$element.md"
+
+        # if note file is empty -> remove
+        if [[ ! -s "$element.md" ]]; then
+            rm "$element.md"
+        fi
         ;;
     help)
         echo "$usage"

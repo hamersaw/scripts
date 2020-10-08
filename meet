@@ -1,11 +1,12 @@
 #!/bin/bash
 
-version="0.1.0"
+version="0.1.1"
 usage="USAGE: $(basename $0) COMMAND
 COMMAND:
     help                        display this help menu
     add <element> <title>       add an element at the desired location
     calendar [date]             print week (containing date) of events
+    edit <element>              edit an existing element
     list [element]              list all elements
     move <element> <element>    move an element within the same level
     remove <element>            remove the specified element
@@ -43,13 +44,21 @@ print_element() {
     local title=$(head -n "$index" "$element" \
         | tail -n 1 | awk '{$1=""; print substr($0,2)}')
 
+    # compile tags
+    local tags=()
+    if [ -f "$datadir/$uuid.md" ]; then
+        tags+=("note")
+    fi
+
+    tagstring=$(join_tags "${tags[@]}")
+
     # print element
     local indent=""
     for (( i=0; i<$1; i++ )); do
         local indent="    $indent"
     done
 
-    echo "$indent$2$3 - $title"
+    echo "$indent$2$3 - $title $tagstring"
 
     id_level "$2"
     if [ "$(( $idlevel + 1 ))" -ge "${#levels[@]}" ]; then
@@ -215,6 +224,21 @@ case "$1" in
 
             datestring="$(date -d "$datestring+1 day" "+%Y-%m-%d")"
         done
+        ;;
+    edit)
+        # check argument length
+        (( $# != 2 )) && echo "'edit' requires one argument" && exit 1
+
+        # validate element
+        validate_id "$2"
+        find_element "$2" 
+
+        vim "$element.md"
+
+        # if note file is empty -> remove
+        if [[ ! -s "$element.md" ]]; then
+            rm "$element.md"
+        fi
         ;;
     help)
         echo "$usage"
