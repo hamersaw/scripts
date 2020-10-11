@@ -189,8 +189,14 @@ case "$1" in
                 while read eventline; do
                     read -r -a eventarray <<< "$eventline"
 
+                    # compile tags
+                    tags=()
+                    if [ -f "$datadir/${eventarray[0]}.md" ]; then
+                        tags+=("note")
+                    fi
+
                     # iterate over dates
-                    datecount=1
+                    #datecount=1
                     while read dateline; do
                         read -r -a datearray <<< "$dateline"
 
@@ -199,6 +205,7 @@ case "$1" in
                             read -r -a meetarray <<< "$meetline"
                             meetingstart="${meetarray[0]}"
                             meetingend="${meetarray[1]}"
+
                             # check if meeting overlaps today
                             if (( "$starttime" <= "$meetingend" )) \
                                     && (( "$endtime" >= "$meetingstart" )); then
@@ -209,11 +216,12 @@ case "$1" in
                                 startdate="$(date -d "@$meetingstart" "+%H:%M:%S")"
                                 enddate="$(date -d "@$meetingend" "+%H:%M:%S")"
 
-                                echo "    - $calendarcount.$eventcount.$datecount $meeting: $startdate - $enddate"
+                                tagstring=$(join_tags "${tags[@]}")
+                                echo "    - $startdate - $enddate : $calendarcount.$eventcount $meeting $tagstring"
                             fi
                         done <"$datadir/${datearray[0]}"
 
-                    datecount=$(( $datecount + 1 ))
+                    #datecount=$(( $datecount + 1 ))
                     done <"$datadir/${eventarray[0]}"
 
                     eventcount=$(( $eventcount + 1 ))
