@@ -50,7 +50,7 @@ case "${@:$OPTIND:1}" in
         hosts=$(echo $hosts | cut -c $hostlength-)
 
         ssh $username@$host -n -o ConnectTimeout=500 \
-            "/tmp/$(basename $0) -u $username hop '$hosts' '$cmd' </dev/null >/tmp/remrun.log 2>&1 &"
+            "/tmp/$(basename $0) -u $username hop '$hosts' '$cmd' </dev/null >/tmp/$(basename $0)-$(date +%Y%m%d%H%M).log 2>&1 &"
         ;;
     hop)
         # parse arguments
@@ -79,7 +79,7 @@ case "${@:$OPTIND:1}" in
             hosts=$(echo $hosts | cut -c $hostlength-)
 
             ssh $username@$host -n -o ConnectTimeout=500 \
-                "/tmp/$(basename $0) -u $username hop '$hosts' '$cmd' </dev/null >/tmp/remrun.log 2>&1 &"
+                "/tmp/$(basename $0) -u $username hop '$hosts' '$cmd' </dev/null >/tmp/$(basename $0)-$(date +%Y%m%d%H%M).log 2>&1 &"
         fi
 
         # cleanup by deleting script
@@ -112,7 +112,7 @@ case "${@:$OPTIND:1}" in
         # iterate over hosts
         for host in $hosts; do
             # execute command in background
-            (ssh $username@$host -n -o ConnectTimeout=500 "nohup $cmd >/tmp/remrun-output.log 2>&1 </dev/null &"; echo -e "--$host--") &
+            (ssh $username@$host -n -o ConnectTimeout=500 "nohup $cmd >/tmp/$(basename $0)-$(date +%Y%m%d%H%M).log 2>&1 </dev/null &"; echo -e "--$host--") &
         done
 
         # wait for all commands to complete
