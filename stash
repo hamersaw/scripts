@@ -157,7 +157,7 @@ case "$1" in
             mv $stashfile $stashfile.bak
             gpg -d -q $stashfile.bak | sed "/^$(stashcode $key)*/d" \
                 | gpg -e -r $gpgusername > $stashfile
-            [ $? -ne 1 ] && echo "failed to remove 'key' from listfile" && exit 1
+            [ $? -ne 0 ] && echo "failed to remove 'key' from listfile" && exit 1
 
             # remove '.bak' files
             rm $listfile.bak $stashfile.bak
