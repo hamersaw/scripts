@@ -4,16 +4,16 @@ version="0.1.0"
 usage="USAGE: $(basename $0) COMMAND
 
 COMMAND:
-    add <element> [OPTIONS...] <title>  add an element at the desired location
+    add <element> [OPTION...] <title>   add an element at the desired location
     help                                display this help menu
-    list [OPTIONS...]                   list all elements
-    modify <element> [OPTIONS...]       update options on element
+    list [OPTION...]                    list all elements
+    modify <element> [OPTION...]        update options on element
     move <element> <element>            move an element within the same level
     remove <element>                    remove the specified element
     version                             display the application version
 
-OPTIONS:
-    TODO"
+OPTION:
+    <key>:<value>                       generic key value pair"
 
 # id_validate(id, is_insert)
 id_validate() {
@@ -72,6 +72,7 @@ id_validate() {
     fi
 }
 
+# TODO - aggregate option_key and option_value to validate_option
 option_key() {
     echo "${1%%:*}"
 }
@@ -184,6 +185,15 @@ case "$1" in
         echo "$usage"
         ;;
     list)
+        # parse filter options
+        declare -A filters
+        for argument in "${@:2}"; do
+            key=$(option_key "$argument")
+            value=$(option_value "$argument")
+
+            filters[$key]="$value"
+        done
+
         fmtstring="%-6s%-6s%-25s%s\n"
         printf "$fmtstring" "LIST" "CARD" "PROJECT" "DESCRIPTION"
 
@@ -200,11 +210,21 @@ case "$1" in
                 declare -A record
                 parse_record "$line" record
 
-                # TODO - apply filters (ex. project:'home*')
+                # apply filters
+                valid=1;
+                for key in "${!filters[@]}"; do
+                    # TODO - seems to be 'contains' -> must look into
+                    if [[ ! ${record[$key]} =~ ${filters[$key]} ]]; then
+                        valid=0
+                        break
+                    fi
+                done
 
-                # print card
-                printf "$fmtstring" "" "${listarray[0]}.$cardid" \
-                    "${record[project]}" "${record[description]}"
+                if [ "$valid" == 1 ]; then
+                    # print card
+                    printf "$fmtstring" "" "${listarray[0]}.$cardid" \
+                        "${record[project]}" "${record[description]}"
+                fi
 
                 # increment card id
                 cardid=$(( cardid + 1 ))
