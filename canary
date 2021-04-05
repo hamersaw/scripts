@@ -4,28 +4,16 @@ version="0.1.0"
 usage="USAGE: $(basename $0) COMMAND
 
 COMMAND:
-    help                                display this help menu
     add <element> [OPTIONS...] <title>  add an element at the desired location
+    help                                display this help menu
     list [OPTIONS...]                   list all elements
+    modify <element> [OPTIONS...]       update options on element
     move <element> <element>            move an element within the same level
     remove <element>                    remove the specified element
     version                             display the application version
 
 OPTIONS:
-    todo"
-
-id_list() {
-    echo "${1%%\.*}"
-}
-
-id_card() {
-    echo "${1#*\.}"
-}
-
-id_length() {
-    local periodarray="${1//[^\.]}"
-    echo "${#periodarray}"
-}
+    TODO"
 
 # id_validate(id, is_insert)
 id_validate() {
@@ -35,7 +23,8 @@ id_validate() {
     fi
 
     # validate id length
-    idlength=$(id_length "$1") # TODO - remove id_length function
+    local periodarray="${1//[^\.]}"
+    idlength="${#periodarray}"
     if [ $idlength -gt 1 ]; then
         echo "invalid id '$1': too many values" && exit 1
     fi
@@ -46,7 +35,7 @@ id_validate() {
         local listinsert="$2"
         listrow="$1"
     elif [ $idlength -eq 1 ]; then
-        local listid=$(id_list "$1") # TODO - remove id_list function
+        local listid="${1%%\.*}"
         local listinsert=0
     fi
 
@@ -73,7 +62,7 @@ id_validate() {
         fi
 
         # validate card id
-        local cardid=$(id_card "$1") # TODO - remove id_card function
+        local cardid="${1#*\.}"
         local maxcardid=$(( count + $2 ))
         if [ "$cardid" -le 0 ] || [ "$cardid" -gt $maxcardid ]; then
             echo "invalid card index '$cardid'" && exit 1
@@ -98,18 +87,6 @@ option_value() {
     fi
 
     echo "$value"
-}
-
-# card_list_uuid(card_id)
-card_list_uuid() {
-    listid=$(id_list "$1")
-    listlength=$(wc -l $listfile | awk '{print $1}')
-    if [ $listid -gt $listlength ]; then
-        echo "invalid list index '$listid'" && exit 1
-    fi
-
-    listuuid=$(sed -n "$listid p" $listfile | awk '{print $1}')
-    echo "$listuuid"
 }
 
 parse_record() {
@@ -207,6 +184,8 @@ case "$1" in
         echo "$usage"
         ;;
     list)
+        printf "%-6s%-6s%-25s%s\n" "LIST" "ID" "PROJECT" "DESCRIPTION"
+
         # iterate over listfile
         while read listline; do
             # echo list number and description
@@ -223,14 +202,17 @@ case "$1" in
                 # TODO - apply filters (ex. project:home)
 
                 # print card
-                echo "    ${listarray[0]}.$cardid ${record[description]}"
-                #  project:${record[project]} due:${record[due]}
+                printf "%-6s%-6s%-25s%s\n" "" "${listarray[0]}.$cardid" \
+                    "${record[project]}" "${record[description]}"
 
                 # increment card id
                 cardid=$(( cardid + 1 ))
                 unset record
             done < <(cat $pendingfile | grep "${listarray[1]}")
         done < <(awk '{print NR, $0}' "$listfile")
+        ;;
+    modify)
+        echo "TODO - implement modify"
         ;;
     move)
         # check argument length
@@ -328,7 +310,7 @@ case "$1" in
             declare -A record
             parse_record "$line" record
             record[status]="completed"
-            record[modified]=$(date +%s)
+            record[end]=$(date +%s)
 
             cardstring=$(record_to_string record)
 
