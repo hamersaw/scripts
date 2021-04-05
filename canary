@@ -184,7 +184,8 @@ case "$1" in
         echo "$usage"
         ;;
     list)
-        printf "%-6s%-6s%-25s%s\n" "LIST" "ID" "PROJECT" "DESCRIPTION"
+        fmtstring="%-6s%-6s%-25s%s\n"
+        printf "$fmtstring" "LIST" "CARD" "PROJECT" "DESCRIPTION"
 
         # iterate over listfile
         while read listline; do
@@ -199,10 +200,10 @@ case "$1" in
                 declare -A record
                 parse_record "$line" record
 
-                # TODO - apply filters (ex. project:home)
+                # TODO - apply filters (ex. project:'home*')
 
                 # print card
-                printf "%-6s%-6s%-25s%s\n" "" "${listarray[0]}.$cardid" \
+                printf "$fmtstring" "" "${listarray[0]}.$cardid" \
                     "${record[project]}" "${record[description]}"
 
                 # increment card id
@@ -212,7 +213,38 @@ case "$1" in
         done < <(awk '{print NR, $0}' "$listfile")
         ;;
     modify)
-        echo "TODO - implement modify"
+        # check argument length
+        (( $# < 3 )) && \
+            echo "'modify' requires at least two arguments" && exit 1
+
+        # validate arguments
+        id_validate "$2" "0"
+        if [ "$idlength" != 1 ]; then
+            echo "'modify' command only allowed on cards" && exit 1
+        fi
+
+        # retrieve line from pendingfile
+        line=$(sed -n "$pendingrow p" "$pendingfile")
+
+        # parse and update record
+        declare -A record
+        parse_record "$line" record
+
+        indexlength=$(( $# - 2 ))
+        for argument in "${@:3:$indexlength}"; do
+            key=$(option_key "$argument")
+            value=$(option_value "$argument")
+
+            record[$key]="$value"
+        done
+
+        record[modified]=$(date +%s)
+        cardstring=$(record_to_string record)
+
+        # replace line in pending file
+        sed -i "$pendingrow c $cardstring" $pendingfile
+
+        echo "[|] modified '$2'"
         ;;
     move)
         # check argument length
