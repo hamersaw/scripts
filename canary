@@ -36,7 +36,7 @@ id_validate() {
 
     # validate id length
     idlength=$(id_length "$1") # TODO - remove id_length function
-    if [[ $idlength -gt 1 ]]; then
+    if [ $idlength -gt 1 ]; then
         echo "invalid id '$1': too many values" && exit 1
     fi
 
@@ -56,13 +56,14 @@ id_validate() {
         echo "invalid list index '$listid'" && exit 1
     fi
 
+    # read cards if list exists
+    if [ $idlength -eq 0 -a $2 -eq 0 ] || [ $idlength -eq 1 ]; then
+        listuuid=$(sed -n "$listid p" $listfile | awk '{print $1}')
+        cards=$(awk '{print NR,$0}' $pendingfile | grep "$listuuid")
+    fi
+
     # validate card id
     if [ $idlength -eq 1 ]; then
-        # find index in pendingfile
-        listuuid=$(sed -n "$listid p" $listfile | awk '{print $1}')
-
-        local cards=$(awk '{print NR,$0}' $pendingfile | grep "$listuuid")
-
         if [[ "$cards" == "" ]]; then
             local firstrowindex=1
             local count=0
@@ -125,7 +126,7 @@ record_to_string() {
 
     cardstring=""
     for key in $(sort -n <<<"$(printf "%s\n" "${!localrecord[@]}")"); do
-        if [[ "${#cardstring}" != 0 ]]; then
+        if [ "${#cardstring}" != 0 ]; then
             cardstring+=" "
         fi
 
@@ -162,7 +163,7 @@ case "$1" in
         record[uuid]=$(cat /proc/sys/kernel/random/uuid)
 
         # initialize card variables
-        if [[ $idlength == 1 ]]; then
+        if [ $idlength == 1 ]; then
             timestamp=$(date +%s)
             record[entry]=$timestamp
             record[modified]=$timestamp
@@ -180,20 +181,20 @@ case "$1" in
         done
 
         # add element # TODO - abstract list and card files
-        if [[ $idlength == 0 ]]; then
+        if [ $idlength == 0 ]; then
             # add list
             if [ "$listrow" -gt $listlength ]; then
                 echo "${record[uuid]} ${record[description]}" >> "$listfile"
             else
                 sed -i "$listrow i ${record[uuid]} ${record[description]}" "$listfile"
             fi
-        elif [[ $idlength == 1 ]]; then
+        elif [ $idlength == 1 ]; then
             # compile card string
             cardstring=$(record_to_string record)
 
             # add card at index
             pendinglength=$(wc -l $pendingfile | awk '{print $1}')
-            if [[ "$pendingrow" -gt $pendinglength ]]; then
+            if [ "$pendingrow" -gt $pendinglength ]; then
                 echo "$cardstring" >> $pendingfile
             else
                 sed -i "$pendingrow i $cardstring" $pendingfile
@@ -241,11 +242,11 @@ case "$1" in
         srcidlength="$idlength"
 
         # TODO - check if indices are the same level
-        #if [[ $srcidlength != $dstidlength ]]; then
+        #if [ $srcidlength != $dstidlength ]; then
         #    echo "" && exit 1
         #fi
 
-        if [[ $srcidlength == 0 ]]; then
+        if [ $srcidlength == 0 ]; then
             # move list
             srclistrow="$listrow"
 
@@ -263,7 +264,7 @@ case "$1" in
             else
                 sed -i "$dstlistrow i $line" "$listfile"
             fi
-        elif [[ $srcidlength == 1 ]]; then
+        elif [ $srcidlength == 1 ]; then
             # parse pending row indices for source and destinate ids
             srcpendingrow="$pendingrow"
             srclistuuid="$listuuid"
@@ -311,9 +312,15 @@ case "$1" in
         # validate arguments
         id_validate "$2" "0"
 
-        if [[ $idlength == 0 ]]; then
-            echo "TODO - remove list"
-        elif [[ $idlength == 1 ]]; then
+        if [ $idlength == 0 ]; then
+            # check if list is empty
+            if [ "$cards" != "" ]; then
+                echo "list '$2' is not empty" && exit 1
+            fi
+
+            # remove line from listfile
+            sed -i "$listrow d" "$listfile"
+        elif [ $idlength == 1 ]; then
             # retrieve line from pendingfile
             line=$(sed -n "$pendingrow p" "$pendingfile")
 
