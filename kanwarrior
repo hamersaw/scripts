@@ -96,7 +96,7 @@ parse_record() {
         key=$(option_key "$block")
         value=$(option_value "$block")
         localrecord["$key"]="$value"
-    done < <(echo "$1" | grep -o '[.A-Za-z]*:"[-.A-Za-z0-9 ]*"')
+    done < <(echo "$1" | grep -o '[.A-Za-z]*:"[()-.A-Za-z0-9 ]*"')
 }
 
 record_to_string() {
@@ -213,8 +213,7 @@ case "$1" in
                 # apply filters
                 valid=1;
                 for key in "${!filters[@]}"; do
-                    # TODO - seems to be 'contains' -> must look into
-                    if [[ ! ${record[$key]} =~ ${filters[$key]} ]]; then
+                    if [[ ! ${record[$key]} =~ ^${filters[$key]}$ ]]; then
                         valid=0
                         break
                     fi
