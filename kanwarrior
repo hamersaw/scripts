@@ -9,6 +9,7 @@ COMMAND:
     list [OPTION...]                    list all elements
     modify <element> [OPTION...]        update options on element
     move <element> <element>            move an element within the same level
+    note <element>                      edit the element note
     remove <element>                    remove the specified element
     version                             display the application version
 
@@ -116,12 +117,14 @@ record_to_string() {
 
 # initialize instance variables
 datadir="$HOME/.local/share/$(basename $0)"
+notedir="$datadir/notes"
 listfile="$datadir/list.txt"
 completedfile="$datadir/completed.data"
 pendingfile="$datadir/pending.data"
 
 # if doesn't exist -> create base configuration files
 [ ! -d "$datadir" ] && mkdir -p "$datadir"
+[ ! -d "$notedir" ] && mkdir -p "$notedir"
 [ ! -f "$listfile" ] && touch "$listfile"
 [ ! -f "$completedfile" ] && touch "$completedfile"
 [ ! -f "$pendingfile" ] && touch "$pendingfile"
@@ -130,7 +133,7 @@ pendingfile="$datadir/pending.data"
 case "$1" in
     add)
         # check argument length
-        (( $# < 3 )) && echo "'add' requires at least two arguments" && exit 1
+        (( $# < 3 )) && echo "'$1' requires at least two arguments" && exit 1
 
         # validate arguments
         id_validate "$2" "1"
@@ -194,8 +197,8 @@ case "$1" in
             filters[$key]="$value"
         done
 
-        fmtstring="%-6s%-6s%-25s%s\n"
-        printf "$fmtstring" "LIST" "CARD" "PROJECT" "DESCRIPTION"
+        fmtstring="%-6s%-6s%-20s%s"
+        printf "$fmtstring\n" "LIST" "CARD" "PROJECT" "DESCRIPTION"
 
         # iterate over listfile
         while read listline; do
@@ -220,13 +223,21 @@ case "$1" in
                 done
 
                 if [ "$valid" == 1 ]; then
+                    # check if note file exists
+                    notefile="$notedir/${record[uuid]}.md"
+                    if [ -f "$notefile" ]; then
+                        tags="[note]"
+                    fi
+
                     # print card
-                    printf "$fmtstring" "" "${listarray[0]}.$cardid" \
+                    printf "$fmtstring $tags\n" "" "${listarray[0]}.$cardid" \
                         "${record[project]}" "${record[description]}"
                 fi
 
                 # increment card id
                 cardid=$(( cardid + 1 ))
+
+                tags=""
                 unset record
             done < <(cat $pendingfile | grep "${listarray[1]}")
         done < <(awk '{print NR, $0}' "$listfile")
@@ -234,12 +245,12 @@ case "$1" in
     modify)
         # check argument length
         (( $# < 3 )) && \
-            echo "'modify' requires at least two arguments" && exit 1
+            echo "'$1' requires at least two arguments" && exit 1
 
         # validate arguments
         id_validate "$2" "0"
         if [ "$idlength" != 1 ]; then
-            echo "'modify' command only allowed on cards" && exit 1
+            echo "'$1' command only allowed on cards" && exit 1
         fi
 
         # retrieve line from pendingfile
@@ -267,8 +278,7 @@ case "$1" in
         ;;
     move)
         # check argument length
-        (( $# != 3 )) && \
-            echo "'move' requires three arguments" && exit 1
+        (( $# != 3 )) && echo "'$1' requires three arguments" && exit 1
 
         # validate arguments
         id_validate "$2" "0"
@@ -338,9 +348,41 @@ case "$1" in
 
         echo "[|] moved '$2' to '$3'"
         ;;
+    note)
+        # check argument length
+        (( $# != 2 )) && echo "'$1' requires one argument" && exit 1
+
+        # validate arguments
+        id_validate "$2" "0"
+        if [ "$idlength" != 1 ]; then
+            echo "'$1' command only allowed on cards" && exit 1
+        fi
+
+        # retrieve line from pendingfile
+        line=$(sed -n "$pendingrow p" "$pendingfile")
+
+        # parse and update record
+        declare -A record
+        parse_record "$line" record
+
+        record[modified]=$(date +%s)
+        cardstring=$(record_to_string record)
+
+        # replace line in pending file
+        sed -i "$pendingrow c $cardstring" $pendingfile
+
+        # edit card note
+        notefile="$notedir/${record[uuid]}.md"
+        vim "$notefile"
+
+        # if note file is empty -> remove
+        if [ ! -s "$notefile" ]; then
+            rm "$notefile"
+        fi
+        ;;
     remove)
         # check argument length
-        (( $# != 2 )) && echo "'remove' requires one argument" && exit 1
+        (( $# != 2 )) && echo "'$1' requires one argument" && exit 1
 
         # validate arguments
         id_validate "$2" "0"
