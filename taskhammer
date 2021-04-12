@@ -187,6 +187,7 @@ def move(args, data, metadata):
             dst_list_row - 1
         data.insert(dst_list_row, datum)
 
+    print(str(src_card_row) + " " + str(dst_card_row))
     if len(src_indices) == 2:
         # update datum
         datum = data[src_card_row]
@@ -197,7 +198,9 @@ def move(args, data, metadata):
 
         # insert new datum
         if src_list_row != dst_list_row and src_card_row < dst_card_row:
-            dst_card_row - 1
+            dst_card_row -= 1
+
+        print(str(src_card_row) + " " + str(dst_card_row))
         data.insert(dst_card_row, datum)
 
     return data

@@ -260,9 +260,10 @@ def move(args, data):
     # delete original datum
     del data[src_row]
 
-    # insert new datum
-    if src_row < dst_row:
-        dst_row - 1
+    # insert new datum - TODO - is this necessary?
+    #if src_row < dst_row:
+    #    dst_row -= 1
+
     data.insert(dst_row, datum)
 
     return data
