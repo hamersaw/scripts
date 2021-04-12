@@ -1,0 +1,418 @@
+#!/bin/python3
+
+"""
+    due     - start and end date
+    start   - start date
+    end     - end date
+    reoccur - interval
+    until   - last date
+"""
+
+import hammer
+
+from datetime import date, datetime, time as dtime, timezone, timedelta
+
+import argparse
+import json
+import math
+import os
+import re
+import subprocess
+import sys
+import time
+import uuid
+
+days = ["monday", "tuesday", "wednesday", 
+    "thursday", "friday", "saturday", "sunday"]
+
+# convert an id into numeric valid
+def parse_id(id):
+    try:
+        return int(id)
+    except:
+        print("invalid id string '" + id + "'")
+        sys.exit(1)
+
+# convert feature string into <key, value> pair
+def parse_feature(feature):
+    match = re.match("^([-A-Za-z]+):(.*)$", feature)
+    if not match:
+        print("invalid feature string '" + feature + "'")
+        sys.exit(1)
+
+    return match.group(1), match.group(2)
+
+# convert timedelta string into day and week values
+def parse_timedelta(timedelta):
+    match = re.match("^([0-9]+)(week|day)(s)?$", timedelta)
+    if not match:
+        print("invalid timedelta string '" + timedelta + "'")
+        sys.exit(1)
+
+    try:
+        valuestr = match.group(1)
+        value = int(valuestr)
+    except:
+        print("invalid timestamp value '" + valuestr + "'")
+        sys.exit(1)
+
+    timedeltas = {
+        "day": (value, 0),
+        "week": (0, value),
+    }
+
+    return timedeltas[match.group(2)]
+
+def parse_start_date(event):
+    return event[1]
+
+# get the row value
+def get_row(data, index, is_insert):
+    # validate list id
+    max_id = len(data)
+    if is_insert:
+        max_id += 1
+
+    if index <= 0 or index > max_id:
+        print("invalid id '" + str(index) + "'")
+        sys.exit(1)
+
+    return index - 1
+
+def add(args, data):
+    # parse and validate id
+    index = parse_id(args.ID)
+    row = get_row(data, index, True)
+
+    # initialize record
+    timestamp = int(time.time())
+    datum = {
+        "uuid": str(uuid.uuid4()),
+        "description": args.DESCRIPTION,
+        "created": timestamp,
+        "modified": timestamp,
+    }
+
+    # parse features and update datum
+    for feature in args.FEATURE:
+        key, value = parse_feature(feature)
+        datum[key] = value
+    
+    # add datum
+    data.insert(row, datum)
+
+    return data
+
+def list_all(args, data):
+    fmt = "%-6s%-20s%-20s%s"
+    print(fmt % ("ID", "PROJECT", "NEXT", "DESCRIPTION"))
+
+    # iterate over data lists
+    for count, datum in enumerate(data):
+        note_flag = ""
+        if "note" in datum:
+            note_flag = "+"
+
+        # TODO - compute next date
+        next = "TODO"
+
+        print(fmt % (str(count + 1) + note_flag,
+            datum.get("project", ""), next,
+            datum["description"]))
+
+def list_range(args, data):
+    # parse and validate arguments
+    try:
+        start_date = date.fromisoformat(args.DATE)
+    except:
+        print("invalid date '" + args.DATE + "'")
+        sys.exit(1)
+
+    try:
+        count = int(args.DAY_COUNT)
+        if count <= 0:
+            raise Exception("invalid day count")
+    except:
+        print("invalid day count '" + args.DAY_COUNT + "'")
+        sys.exit(1)
+
+    # iterate over day range
+    fmt = "%-6s%-6s%-16s%-16s%s"
+    print(fmt % ("DATE", "ID", "START", "END", "DESCRIPTION"))
+
+    day_delta = timedelta(days=1)
+    for i in range(0, count):
+        # print day
+        local_date = start_date + (i * day_delta)
+        print(local_date.isoformat() + " " + days[local_date.weekday()])
+
+        start_datetime = datetime.combine(local_date,
+            dtime(0, 0, 0), hammer.timezone)
+        end_datetime = datetime.combine(local_date,
+            dtime(23, 59, 59), hammer.timezone)
+
+        # TODO - use taskhammer tasks as well
+
+        # find datum in range
+        events=[]
+        for count, datum in enumerate(data):
+            if "due" in datum:
+                # single due datetime
+                datum_start = datetime.fromisoformat(datum["due"])
+                datum_end = datum_start
+            elif "start" in datum and "end" in datum:
+                # single start and end datetime
+                datum_start = datetime.fromisoformat(datum["start"])
+                datum_end = datetime.fromisoformat(datum["end"])
+
+                if "reoccur" in datum:
+                    day, week = parse_timedelta(datum["reoccur"])
+                    reoccur = timedelta(days=day, weeks=week)
+
+                    diff = end_datetime - datum_start
+                    multiplier = math.floor(diff / reoccur)
+
+                    # if multiplier is negative -> datum_start is after end_datetime
+                    if multiplier < 0:
+                        continue
+
+                    additive = reoccur * multiplier
+                    reoccur_datum_start = datum_start + additive
+                    reoccur_datum_end = datum_end + additive
+
+                    if "until" in datum:
+                        datum_until_date = \
+                            date.fromisoformat(datum["until"])
+                        datum_until = datetime.combine(datum_until_date,
+                            dtime(23, 59, 59), hammer.timezone)
+
+                        if reoccur_datum_start > datum_until:
+                            continue
+
+                    datum_start = reoccur_datum_start
+                    datum_end = reoccur_datum_end
+
+            # if dates have no attached timezone -> use base
+            if datum_start.tzinfo == None:
+                datum_start = datum_start.replace(tzinfo=hammer.timezone)
+
+            if datum_end.tzinfo == None:
+                datum_end = datum_end.replace(tzinfo=hammer.timezone)
+
+            # convert start and end to our timezone
+            datum_start = datum_start.astimezone(hammer.timezone)
+            datum_end = datum_end.astimezone(hammer.timezone)
+
+            if datum_start <= end_datetime and datum_end >= start_datetime:
+                # if datum_start before start_datetime -> begins at 00:00:00
+                if datum_start < start_datetime:
+                    start_time = dtime(0, 0, 0, tzinfo=hammer.timezone)
+                else:
+                    start_time = datum_start.timetz()
+
+                # if datum_end after end_datetime -> ends at 23:59:59
+                if datum_end > end_datetime:
+                    end_time = dtime(23, 59, 59, tzinfo=hammer.timezone)
+                else:
+                    end_time = datum_end.timetz()
+
+                events.append((count + 1, start_time, end_time, datum))
+
+        # iterate over sorted dates and print
+        events.sort(key=parse_start_date)
+        for id, start_time, end_time, datum in events:
+            note_flag = ""
+            if "note" in datum:
+                note_flag = "+"
+
+            print(fmt % ("", str(id) + note_flag, 
+                start_time.isoformat(),
+                end_time.isoformat(),
+                datum["description"]))
+
+def modify(args, data):
+    # parse and validate id
+    index = parse_id(args.ID)
+    row = get_row(data, index, False)
+
+    # retrieve datum
+    datum = data[row]
+
+    # parse features and update datum
+    for feature in args.FEATURE:
+        key, value = parse_feature(feature)
+        datum[key] = value
+
+    datum["modified"] = int(time.time())
+    return data
+
+def move(args, data):
+    # parse
+    src_index = parse_id(args.SRC_ID)
+    dst_index = parse_id(args.DST_ID)
+
+    src_row = get_row(data, src_index, False)
+    dst_row = get_row(data, dst_index, False)
+
+    # retrieve datum
+    datum = data[src_row]
+
+    # delete original datum
+    del data[src_row]
+
+    # insert new datum
+    if src_row < dst_row:
+        dst_row - 1
+    data.insert(dst_row, datum)
+
+    return data
+
+def note(args, data):
+    # parse and validate id
+    index = parse_id(args.ID)
+    row = get_row(data, index, False)
+
+    # find datum
+    datum = data[row]
+
+    # write existing note to note file
+    note_file = hammer.data_directory + "/" + datum["uuid"] + ".md"
+
+    note = datum.get("note", "")
+    with open(note_file, "w") as f:
+        f.write(note)
+
+    # launch editor
+    return_value = subprocess.call("vim " + note_file, shell=True)
+
+    # read new note contents
+    with open(note_file, "r") as f:
+        content = f.readlines()
+        note = "".join(content)
+
+    os.remove(note_file)
+
+    # write note to datum
+    if note != "":
+        datum["note"] = note
+    elif "note" in datum:
+        del datum["note"]
+
+    datum["modified"] = int(time.time())
+    return data
+
+def remove(args, data):
+    # parse and validate id
+    index = parse_id(args.ID)
+    row = get_row(data, index, False)
+
+    # delete datum
+    datum = data[row]
+    del data[row]
+
+    # add datum to completed file
+    datum["end"] = int(time.time())
+    with open(hammer.time_completed_file, "a") as f:
+        f.write(json.dumps(datum, sort_keys=True) + "\n")
+
+    return data
+
+def show(args, data):
+    # parse and validate id
+    index = parse_id(args.ID)
+    row = get_row(data, index, False)
+
+    # print datum
+    datum = data[row]
+    print(json.dumps(datum, sort_keys=False, indent=2))
+
+if __name__ == "__main__":
+    # initialize argument parser
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(title="subcommands", dest="subparser")
+
+    add_parser = subparsers.add_parser("add",
+        help="add an element at the specified location")
+    add_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+    add_parser.add_argument("FEATURE", nargs="*",
+        help="element features [format: 'key:value'] pair")
+    add_parser.add_argument("DESCRIPTION",
+        help="description of element")
+
+    list_all_parser = subparsers.add_parser("list.all",
+        help="list all elements")
+
+    list_range_parser = subparsers.add_parser("list.range", aliases=["list"],
+        help="list elements within the specified range")
+    list_range_parser.add_argument("DATE", nargs="?",
+        default=date.today().isoformat(),
+        help="beginning date of range")
+    list_range_parser.add_argument("DAY_COUNT", nargs="?", default=7,
+        help="the number of days to display")
+
+    modify_parser = subparsers.add_parser("modify",
+        help="modify features on a specific element")
+    modify_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+    modify_parser.add_argument("FEATURE", nargs="*",
+        help="element features [format: 'key:value'] pair")
+
+    move_parser = subparsers.add_parser("move",
+        help="move an element within the same id level")
+    move_parser.add_argument("SRC_ID",
+        help="source element identifer [format: period delimited indices]")
+    move_parser.add_argument("DST_ID",
+        help="descrination element identifer [format: period delimited indices]")
+
+    note_parser = subparsers.add_parser("note",
+        help="edit the note attached to the specified element")
+    note_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+
+    remove_parser = subparsers.add_parser("remove",
+        help="remove the specified element")
+    remove_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+
+    show_parser = subparsers.add_parser("show",
+        help="show all features from the specified element")
+    show_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+
+    # parse arguments
+    args = parser.parse_args()
+    if args.subparser == None:
+        parser.print_help()
+        sys.exit(1)
+
+    # parse data contents
+    f = open(hammer.time_data_file, "r")
+    contents = f.readlines()
+    f.close()
+
+    data = []
+    for content in contents:
+        data.append(json.loads(content))
+
+    # execute subcommand
+    subcommands = {
+        "add": add,
+        "list": list_range,
+        "list.all": list_all,
+        "list.range": list_range,
+        "move": move,
+        "modify": modify,
+        "note": note,
+        "remove": remove,
+        "show": show,
+    }
+
+    data = subcommands.get(args.subparser)(args, data)
+
+    # write contents back
+    if data:
+        f = open(hammer.time_data_file, "w")
+        for datum in data:
+            f.write(json.dumps(datum, sort_keys=True) + "\n")
+        f.close()
