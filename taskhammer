@@ -256,7 +256,7 @@ def remove(args, data, metadata):
         # add datum to completed file
         datum = data[card_row]
 
-        datum["end"] = int(time.time())
+        datum["completed"] = int(time.time())
         with open(hammer.task_completed_file, "a") as f:
             f.write(json.dumps(datum, sort_keys=True) + "\n")
 

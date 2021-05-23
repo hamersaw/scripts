@@ -309,7 +309,7 @@ def remove(args, data):
     del data[row]
 
     # add datum to completed file
-    datum["end"] = int(time.time())
+    datum["completed"] = int(time.time())
     with open(hammer.time_completed_file, "a") as f:
         f.write(json.dumps(datum, sort_keys=True) + "\n")
 

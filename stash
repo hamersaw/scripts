@@ -40,7 +40,7 @@ fi
 case "$1" in
     clip)
         # check argument length
-        (( $# != 2 )) && echo "'get' requires one argument" && exit 1
+        (( $# != 2 )) && echo "'clip' requires one argument" && exit 1
 
         # validate the keys stashfile exists 
         stashfile="$stashdir/$(stashfile $2)"
