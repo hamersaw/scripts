@@ -3,6 +3,7 @@
 import argparse
 import json
 import os
+import random
 import re
 import subprocess
 import sys
@@ -73,28 +74,28 @@ def add(args, data):
         key, value = parse_feature(feature)
         datum[key] = value
 
-    # write existing note to note file
-    note_file = data_directory + "/" + datum["uuid"] + ".md"
+    # write existing answer to answer file
+    answer_file = data_directory + "/" + datum["uuid"] + ".md"
 
-    note = datum.get("note", "")
-    with open(note_file, "w") as f:
-        f.write(note)
+    answer = datum.get("answer", "")
+    with open(answer_file, "w") as f:
+        f.write(answer)
 
     # launch editor
-    return_value = subprocess.call("vim " + note_file, shell=True)
+    return_value = subprocess.call("vim " + answer_file, shell=True)
 
-    # read new note contents
-    with open(note_file, "r") as f:
+    # read new answer contents
+    with open(answer_file, "r") as f:
         content = f.readlines()
-        note = "".join(content)
+        answer = "".join(content)
 
-    os.remove(note_file)
+    os.remove(answer_file)
 
-    # write note to datum
-    if note != "":
-        datum["note"] = note
-    elif "note" in datum:
-        del datum["note"]
+    # write answer to datum
+    if answer != "":
+        datum["answer"] = answer
+    elif "answer" in datum:
+        del datum["answer"]
     
     # add datum
     data.append(datum)
@@ -123,28 +124,28 @@ def modify(args, data):
         key, value = parse_feature(feature)
         datum[key] = value
 
-    # write existing note to note file
-    note_file = data_directory + "/" + datum["uuid"] + ".md"
+    # write existing answer to answer file
+    answer_file = data_directory + "/" + datum["uuid"] + ".md"
 
-    note = datum.get("note", "")
-    with open(note_file, "w") as f:
-        f.write(note)
+    answer = datum.get("answer", "")
+    with open(answer_file, "w") as f:
+        f.write(answer)
 
     # launch editor
-    return_value = subprocess.call("vim " + note_file, shell=True)
+    return_value = subprocess.call("vim " + answer_file, shell=True)
 
-    # read new note contents
-    with open(note_file, "r") as f:
+    # read new answer contents
+    with open(answer_file, "r") as f:
         content = f.readlines()
-        note = "".join(content)
+        answer = "".join(content)
 
-    os.remove(note_file)
+    os.remove(answer_file)
 
-    # write note to datum
-    if note != "":
-        datum["note"] = note
-    elif "note" in datum:
-        del datum["note"]
+    # write answer to datum
+    if answer != "":
+        datum["answer"] = answer
+    elif "answer" in datum:
+        del datum["answer"]
 
     datum["modified"] = int(time.time())
     return data
@@ -193,6 +194,18 @@ def show(args, data):
     datum = data[row]
     print(json.dumps(datum, sort_keys=False, indent=2))
 
+def study(args, data):
+    # randomly iterate over all data
+    while (len(data) != 0):
+        index = random.randrange(len(data))
+        datum = data.pop(index)
+
+        # print question
+        input("CARD " + str(index + 1) + ": " + datum["question"])
+
+        # print answer
+        print(datum.get("answer", "answer not provided"))
+
 if __name__ == "__main__":
     # initialize argument parser
     parser = argparse.ArgumentParser()
@@ -225,6 +238,9 @@ if __name__ == "__main__":
         help="show all features from the specified card")
     show_parser.add_argument("ID", help="card identifer")
 
+    study_parser = subparsers.add_parser("study",
+        help="iterate over cards in random order")
+
     # parse arguments
     args = parser.parse_args()
     if args.subparser == None:
@@ -248,6 +264,7 @@ if __name__ == "__main__":
         "modify": modify,
         "remove": remove,
         "show": show,
+        "study": study,
     }
 
     data = subcommands.get(args.subparser)(args, data)
