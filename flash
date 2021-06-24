@@ -1,0 +1,260 @@
+#!/bin/python3
+
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import uuid
+
+def touch(filename):
+    f = open(filename, "a")
+    f.close()
+
+# intiailize data directory
+data_directory = os.getenv("HOME") + "/.local/share/flash"
+if not os.path.exists(data_directory):
+    os.makedirs(data_directory)
+
+# initialize card files
+card_completed_file = data_directory + "/card.completed"
+card_data_file = data_directory + "/card.data"
+
+if not os.path.exists(card_completed_file):
+    touch(card_completed_file)
+
+if not os.path.exists(card_data_file):
+    touch(card_data_file)
+
+# convert an id into numeric valid
+def parse_id(id):
+    try:
+        return int(id)
+    except:
+        print("invalid id string '" + id + "'")
+        sys.exit(1)
+
+# convert feature string into <key, value> pair
+def parse_feature(feature):
+    match = re.match("^([-A-Za-z]+):(.*)$", feature)
+    if not match:
+        print("invalid feature string '" + feature + "'")
+        sys.exit(1)
+
+    return match.group(1), match.group(2)
+
+# get the row value
+def get_row(data, index, is_insert):
+    # validate list id
+    max_id = len(data)
+    if is_insert:
+        max_id += 1
+
+    if index <= 0 or index > max_id:
+        print("invalid id '" + str(index) + "'")
+        sys.exit(1)
+
+    return index - 1
+
+def add(args, data):
+    # initialize record
+    timestamp = int(time.time())
+    datum = {
+        "uuid": str(uuid.uuid4()),
+        "question": args.QUESTION,
+        "created": timestamp,
+        "modified": timestamp,
+    }
+
+    # parse features and update datum
+    for feature in args.FEATURE:
+        key, value = parse_feature(feature)
+        datum[key] = value
+
+    # write existing note to note file
+    note_file = data_directory + "/" + datum["uuid"] + ".md"
+
+    note = datum.get("note", "")
+    with open(note_file, "w") as f:
+        f.write(note)
+
+    # launch editor
+    return_value = subprocess.call("vim " + note_file, shell=True)
+
+    # read new note contents
+    with open(note_file, "r") as f:
+        content = f.readlines()
+        note = "".join(content)
+
+    os.remove(note_file)
+
+    # write note to datum
+    if note != "":
+        datum["note"] = note
+    elif "note" in datum:
+        del datum["note"]
+    
+    # add datum
+    data.append(datum)
+
+    return data
+
+def list(args, data):
+    fmt = "%-6s%-16s%-16s%-50s"
+    print(fmt % ("ID", "DECK", "TOPIC", "QUESTION"))
+
+    # iterate over data lists
+    for count, datum in enumerate(data):
+        print(fmt % (str(count + 1), datum.get("deck", ""),
+            datum.get("topic", ""), datum["question"]))
+
+def modify(args, data):
+    # parse and validate id
+    index = parse_id(args.ID)
+    row = get_row(data, index, False)
+
+    # retrieve datum
+    datum = data[row]
+
+    # parse features and update datum
+    for feature in args.FEATURE:
+        key, value = parse_feature(feature)
+        datum[key] = value
+
+    # write existing note to note file
+    note_file = data_directory + "/" + datum["uuid"] + ".md"
+
+    note = datum.get("note", "")
+    with open(note_file, "w") as f:
+        f.write(note)
+
+    # launch editor
+    return_value = subprocess.call("vim " + note_file, shell=True)
+
+    # read new note contents
+    with open(note_file, "r") as f:
+        content = f.readlines()
+        note = "".join(content)
+
+    os.remove(note_file)
+
+    # write note to datum
+    if note != "":
+        datum["note"] = note
+    elif "note" in datum:
+        del datum["note"]
+
+    datum["modified"] = int(time.time())
+    return data
+
+def move(args, data):
+    # parse
+    src_index = parse_id(args.SRC_ID)
+    dst_index = parse_id(args.DST_ID)
+
+    src_row = get_row(data, src_index, False)
+    dst_row = get_row(data, dst_index, False)
+
+    # retrieve datum
+    datum = data[src_row]
+
+    # delete original datum
+    del data[src_row]
+
+    # insert new datum
+    data.insert(dst_row, datum)
+
+    return data
+
+def remove(args, data):
+    # parse and validate id
+    index = parse_id(args.ID)
+    row = get_row(data, index, False)
+
+    # delete datum
+    datum = data[row]
+    del data[row]
+
+    # add datum to completed file
+    datum["completed"] = int(time.time())
+    with open(card_completed_file, "a") as f:
+        f.write(json.dumps(datum, sort_keys=True) + "\n")
+
+    return data
+
+def show(args, data):
+    # parse and validate id
+    index = parse_id(args.ID)
+    row = get_row(data, index, False)
+
+    # print datum
+    datum = data[row]
+    print(json.dumps(datum, sort_keys=False, indent=2))
+
+if __name__ == "__main__":
+    # initialize argument parser
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(title="subcommands", dest="subparser")
+
+    add_parser = subparsers.add_parser("add",
+        help="add a new card")
+    add_parser.add_argument("FEATURE", nargs="*",
+        help="card features [format: 'key:value'] pair")
+    add_parser.add_argument("QUESTION",
+        help="question on the front of the card")
+
+    list_parser = subparsers.add_parser("list", help="list all cards")
+
+    modify_parser = subparsers.add_parser("modify",
+        help="modify features on a specific card")
+    modify_parser.add_argument("ID", help="card identifer")
+    modify_parser.add_argument("FEATURE", nargs="*",
+        help="element features [format: 'key:value'] pair")
+
+    move_parser = subparsers.add_parser("move", help="move a card")
+    move_parser.add_argument("SRC_ID", help="source card identifer")
+    move_parser.add_argument("DST_ID", help="desctination card identifer")
+
+    remove_parser = subparsers.add_parser("remove",
+        help="remove the specified card")
+    remove_parser.add_argument("ID", help="card identifer")
+
+    show_parser = subparsers.add_parser("show",
+        help="show all features from the specified card")
+    show_parser.add_argument("ID", help="card identifer")
+
+    # parse arguments
+    args = parser.parse_args()
+    if args.subparser == None:
+        parser.print_help()
+        sys.exit(1)
+
+    # parse data contents
+    f = open(card_data_file, "r")
+    contents = f.readlines()
+    f.close()
+
+    data = []
+    for content in contents:
+        data.append(json.loads(content))
+
+    # execute subcommand
+    subcommands = {
+        "add": add,
+        "list": list,
+        "move": move,
+        "modify": modify,
+        "remove": remove,
+        "show": show,
+    }
+
+    data = subcommands.get(args.subparser)(args, data)
+
+    # write contents back
+    if data:
+        f = open(card_data_file, "w")
+        for datum in data:
+            f.write(json.dumps(datum, sort_keys=True) + "\n")
+        f.close()
