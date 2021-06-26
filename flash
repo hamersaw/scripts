@@ -59,57 +59,41 @@ def get_row(data, index, is_insert):
 
     return index - 1
 
-def add(args, data):
-    # initialize record
-    timestamp = int(time.time())
-    datum = {
-        "uuid": str(uuid.uuid4()),
-        "question": args.QUESTION,
-        "created": timestamp,
-        "modified": timestamp,
-    }
-
-    # parse features and update datum
-    for feature in args.FEATURE:
-        key, value = parse_feature(feature)
-        datum[key] = value
-
-    # write existing answer to answer file
-    answer_file = data_directory + "/" + datum["uuid"] + ".md"
-
-    answer = datum.get("answer", "")
-    with open(answer_file, "w") as f:
-        f.write(answer)
+# get contents of a user edited file
+def edit_with_file(filename, content):
+    # write existing contents to file
+    with open(filename, "w") as f:
+        f.write(content)
 
     # launch editor
-    return_value = subprocess.call("vim " + answer_file, shell=True)
+    return_value = subprocess.call("vim " + filename, shell=True)
 
-    # read new answer contents
-    with open(answer_file, "r") as f:
-        content = f.readlines()
-        answer = "".join(content)
+    # read new contents
+    with open(filename, "r") as f:
+        lines = f.readlines()
+        content = "".join(lines)
 
-    os.remove(answer_file)
+    # delete temporary file
+    os.remove(filename)
 
-    # write answer to datum
-    if answer != "":
-        datum["answer"] = answer
-    elif "answer" in datum:
-        del datum["answer"]
-    
-    # add datum
-    data.append(datum)
+    # remove trailing newline
+    if len(content) != 0:
+        content = content[:len(content)-1]
 
-    return data
+    return content
 
 def list(args, data):
-    fmt = "%-6s%-16s%-16s%-50s"
+    fmt = "%-6s%-20s%-20s%-50s"
     print(fmt % ("ID", "DECK", "TOPIC", "QUESTION"))
 
     # iterate over data lists
     for count, datum in enumerate(data):
+        question = datum["question"]
+        if question.count('\n') > 0:
+            question = question.split("\n")[0] + " ..."
+
         print(fmt % (str(count + 1), datum.get("deck", ""),
-            datum.get("topic", ""), datum["question"]))
+            datum.get("topic", ""), question))
 
 def modify(args, data):
     # parse and validate id
@@ -124,28 +108,27 @@ def modify(args, data):
         key, value = parse_feature(feature)
         datum[key] = value
 
-    # write existing answer to answer file
+    # use file to edit question
+    question_file = data_directory + "/" + datum["uuid"] + ".md"
+    question = edit_with_file(question_file, datum["question"])
+
+    # write question to datum
+    if question == "":
+        print("error: question cannot be empty")
+        return
+    
+    datum["question"] = question
+
+    # use file to gather answer
     answer_file = data_directory + "/" + datum["uuid"] + ".md"
-
-    answer = datum.get("answer", "")
-    with open(answer_file, "w") as f:
-        f.write(answer)
-
-    # launch editor
-    return_value = subprocess.call("vim " + answer_file, shell=True)
-
-    # read new answer contents
-    with open(answer_file, "r") as f:
-        content = f.readlines()
-        answer = "".join(content)
-
-    os.remove(answer_file)
+    answer = edit_with_file(answer_file, datum["answer"])
 
     # write answer to datum
-    if answer != "":
-        datum["answer"] = answer
-    elif "answer" in datum:
-        del datum["answer"]
+    if answer == "":
+        print("error: answer cannot be empty")
+        return
+    
+    datum["answer"] = answer
 
     datum["modified"] = int(time.time())
     return data
@@ -166,6 +149,47 @@ def move(args, data):
 
     # insert new datum
     data.insert(dst_row, datum)
+
+    return data
+
+def new(args, data):
+    # initialize record
+    timestamp = int(time.time())
+    datum = {
+        "uuid": str(uuid.uuid4()),
+        "created": timestamp,
+        "modified": timestamp,
+    }
+
+    # parse features and update datum
+    for feature in args.FEATURE:
+        key, value = parse_feature(feature)
+        datum[key] = value
+
+    # use file to gather question
+    question_file = data_directory + "/" + datum["uuid"] + ".md"
+    question = edit_with_file(question_file, "please write question here ...")
+
+    # write question to datum
+    if question == "":
+        print("error: question cannot be empty")
+        return
+    
+    datum["question"] = question
+
+    # use file to gather answer
+    answer_file = data_directory + "/" + datum["uuid"] + ".md"
+    answer = edit_with_file(answer_file, "please write answer here ...")
+
+    # write answer to datum
+    if answer == "":
+        print("error: answer cannot be empty")
+        return
+    
+    datum["answer"] = answer
+    
+    # add datum
+    data.append(datum)
 
     return data
 
@@ -211,13 +235,6 @@ if __name__ == "__main__":
     parser = argparse.ArgumentParser()
     subparsers = parser.add_subparsers(title="subcommands", dest="subparser")
 
-    add_parser = subparsers.add_parser("add",
-        help="add a new card")
-    add_parser.add_argument("FEATURE", nargs="*",
-        help="card features [format: 'key:value'] pair")
-    add_parser.add_argument("QUESTION",
-        help="question on the front of the card")
-
     list_parser = subparsers.add_parser("list", help="list all cards")
 
     modify_parser = subparsers.add_parser("modify",
@@ -229,6 +246,11 @@ if __name__ == "__main__":
     move_parser = subparsers.add_parser("move", help="move a card")
     move_parser.add_argument("SRC_ID", help="source card identifer")
     move_parser.add_argument("DST_ID", help="desctination card identifer")
+
+    new_parser = subparsers.add_parser("new",
+        help="add a new card")
+    new_parser.add_argument("FEATURE", nargs="*",
+        help="card features [format: 'key:value'] pair")
 
     remove_parser = subparsers.add_parser("remove",
         help="remove the specified card")
@@ -258,10 +280,10 @@ if __name__ == "__main__":
 
     # execute subcommand
     subcommands = {
-        "add": add,
         "list": list,
         "move": move,
         "modify": modify,
+        "new": new,
         "remove": remove,
         "show": show,
         "study": study,
