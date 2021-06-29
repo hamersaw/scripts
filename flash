@@ -77,20 +77,29 @@ def edit_with_file(filename, content):
     os.remove(filename)
 
     # remove trailing newline
-    if len(content) != 0:
+    if len(content) != 0 and content[len(content)-1] == '\n':
         content = content[:len(content)-1]
 
     return content
 
 def list(args, data):
-    fmt = "%-6s%-20s%-20s%-50s"
+    fmt = "%-6s%-20s%-20s%s"
     print(fmt % ("ID", "DECK", "TOPIC", "QUESTION"))
 
     # iterate over data lists
     for count, datum in enumerate(data):
         question = datum["question"]
+        truncated = False
         if question.count('\n') > 0:
-            question = question.split("\n")[0] + " ..."
+            question = question.split("\n")[0]
+            truncated = True
+
+        if len(question) > 40:
+            question = question[:40]
+            truncated = True
+
+        if truncated:
+            question += " ..."
 
         print(fmt % (str(count + 1), datum.get("deck", ""),
             datum.get("topic", ""), question))
