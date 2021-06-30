@@ -46,6 +46,28 @@ def parse_feature(feature):
 
     return match.group(1), match.group(2)
 
+# filter data that begins with feature ids
+def filter(data, features):
+    # compile feature regexes
+    regexes = {}
+    for feature in features:
+        key, value = parse_feature(feature)
+        regexes[key] = re.compile("^" + value.replace(".", "\.") + "(\..*|$)")
+
+    # filter data on regexes
+    filtered_data = []
+    for datum in data:
+        valid = True
+        for key in regexes:
+            if not regexes[key].match(datum[key]):
+                valid = False
+                break
+
+        if valid:
+            filtered_data.append(datum)
+
+    return filtered_data
+
 # get the row value
 def get_row(data, index, is_insert):
     # validate list id
@@ -85,6 +107,10 @@ def edit_with_file(filename, content):
 def list(args, data):
     fmt = "%-6s%-20s%-20s%s"
     print(fmt % ("ID", "DECK", "TOPIC", "QUESTION"))
+
+    # filter data if features exist
+    if args.FEATURE != None and len(args.FEATURE) != 0:
+        data = filter(data, args.FEATURE)
 
     # iterate over data lists
     for count, datum in enumerate(data):
@@ -228,6 +254,10 @@ def show(args, data):
     print(json.dumps(datum, sort_keys=False, indent=2))
 
 def study(args, data):
+    # filter data if features exist
+    if args.FEATURE != None and len(args.FEATURE) != 0:
+        data = filter(data, args.FEATURE)
+
     # randomly iterate over all data
     while (len(data) != 0):
         index = random.randrange(len(data))
@@ -245,6 +275,8 @@ if __name__ == "__main__":
     subparsers = parser.add_subparsers(title="subcommands", dest="subparser")
 
     list_parser = subparsers.add_parser("list", help="list all cards")
+    list_parser.add_argument("FEATURE", nargs="*",
+        help="element features [format: 'key:value'] pair")
 
     modify_parser = subparsers.add_parser("modify",
         help="modify features on a specific card")
@@ -271,6 +303,8 @@ if __name__ == "__main__":
 
     study_parser = subparsers.add_parser("study",
         help="iterate over cards in random order")
+    study_parser.add_argument("FEATURE", nargs="*",
+        help="element features [format: 'key:value'] pair")
 
     # parse arguments
     args = parser.parse_args()
