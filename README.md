@@ -10,7 +10,6 @@ Repository of general-use scripts.
 - spread: remotely execute a command on a cluster of hosts
 - stash: encrypted hierarchical key-value store
 - taskhammer: kanban board based task manager
-- timehammer: schedule management script
 
 ## COMMANDS
     # dump stash <key, value> pairs

@@ -9,11 +9,8 @@ modified        req     req
 deleted         opt     opt
 parent                  req
 project                 opt
-due                     opt
 note                    opt
 """
-
-import hammer
 
 import argparse
 import json
@@ -26,6 +23,25 @@ import uuid
 
 BOLD = '\033[1m'
 END = '\033[0m'
+
+def touch(filename):
+    f = open(filename, "a")
+    f.close()
+
+# intiailize data directory
+data_directory = os.getenv("HOME") + "/.local/share/hammer"
+if not os.path.exists(data_directory):
+    os.makedirs(data_directory)
+
+# initialize task files
+task_completed_file = data_directory + "/task.completed"
+task_data_file = data_directory + "/task.data"
+
+if not os.path.exists(task_completed_file):
+    touch(task_completed_file)
+
+if not os.path.exists(task_data_file):
+    touch(task_data_file)
 
 # convert an id into a list of indices
 def parse_id(id):
@@ -216,7 +232,7 @@ def note(args, data, metadata):
         datum = data[card_row]
 
     # write existing note to note file
-    note_file = hammer.data_directory + "/" + datum["uuid"] + ".md"
+    note_file = data_directory + "/" + datum["uuid"] + ".md"
 
     note = datum.get("note", "")
     with open(note_file, "w") as f:
@@ -260,7 +276,7 @@ def remove(args, data, metadata):
         datum = data[card_row]
 
         datum["completed"] = int(time.time())
-        with open(hammer.task_completed_file, "a") as f:
+        with open(task_completed_file, "a") as f:
             f.write(json.dumps(datum, sort_keys=True) + "\n")
 
         del data[card_row]
@@ -333,7 +349,7 @@ if __name__ == "__main__":
         sys.exit(1)
 
     # parse data contents
-    f = open(hammer.task_data_file, "r")
+    f = open(task_data_file, "r")
     contents = f.readlines()
     f.close()
 
@@ -363,7 +379,7 @@ if __name__ == "__main__":
 
     # write contents back
     if data:
-        f = open(hammer.task_data_file, "w")
+        f = open(task_data_file, "w")
         for datum in data:
             f.write(json.dumps(datum, sort_keys=True) + "\n")
         f.close()
