@@ -24,6 +24,9 @@ import sys
 import time
 import uuid
 
+BOLD = '\033[1m'
+END = '\033[0m'
+
 # convert an id into a list of indices
 def parse_id(id):
     indices = []
@@ -113,12 +116,12 @@ def add(args, data, metadata):
 
 def list(args, data, metadata):
     listfmt = "%-6s%-6s%-20s%s"
-    print(listfmt % ("LIST", "CARD", "PROJECT", "DESCRIPTION"))
+    print((BOLD + listfmt + END) % ("LIST", "CARD", "PROJECT", "DESCRIPTION"))
 
     # iterate over data lists
     for list_count, list_uuid in enumerate(metadata):
         list_datum = data[list_count]
-        print(str(list_count + 1) + " " + list_datum["description"])
+        print(BOLD + str(list_count + 1) + " " + list_datum["description"] + END)
 
         # iterate over card list
         card_list = metadata[list_uuid]
