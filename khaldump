@@ -1,0 +1,8 @@
+#!/bin/bash
+
+search="${@// /\\s}"
+for file in $(ls $HOME/.local/share/khal/calendars/**/*.ics); do
+    if grep -q "$search" "$file"; then
+        cat "$file"
+    fi
+done

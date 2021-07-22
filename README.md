@@ -6,6 +6,7 @@ Repository of general-use scripts.
 - backup: backup script that creates tgz archives
 - dotfiles: wrapper script for managing dotfiles using a git repository
 - flash: terminal-based flash card store for studying
+- khaldump: cat khal ics files containing arguments
 - spread: remotely execute a command on a cluster of hosts
 - stash: encrypted hierarchical key-value store
 - taskhammer: kanban board based task manager
