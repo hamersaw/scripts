@@ -130,6 +130,21 @@ def add(args, data, metadata):
 
     return data
 
+def cat(args, data, metadata):
+    # parse and validate id
+    indices = parse_id(args.ID)
+    list_row, card_row = get_rows(data, metadata, indices, False)
+
+    # find datum
+    if len(indices) == 1:
+        datum = data[list_row]
+    elif len(indices) == 2:
+        datum = data[card_row]
+
+    # write existing note to note file
+    note = datum.get("note", "")
+    print(note, end="")
+
 def list(args, data, metadata):
     listfmt = "%-6s%-6s%-20s%s"
     print((BOLD + listfmt + END) % ("LIST", "CARD", "PROJECT", "DESCRIPTION"))
@@ -310,6 +325,11 @@ if __name__ == "__main__":
     add_parser.add_argument("DESCRIPTION",
         help="description of element")
 
+    cat_parser = subparsers.add_parser("cat",
+        help="display note attached to the specified element")
+    cat_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+
     list_parser = subparsers.add_parser("list",
         help="list all elements")
 
@@ -367,6 +387,7 @@ if __name__ == "__main__":
     # execute subcommand
     subcommands = {
         "add": add,
+        "cat": cat,
         "list": list,
         "move": move,
         "modify": modify,
