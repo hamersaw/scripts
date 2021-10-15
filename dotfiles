@@ -29,6 +29,8 @@ case "$1" in
 
         # clone the remote repository
         git clone --bare $2 $dotfilesdir
+        git --git-dir=$dotfilesdir config \
+            --local status.showUntrackedFiles no
         echo "\ncomplete process with '$(basename $0) checkout'"
         ;;
     help)

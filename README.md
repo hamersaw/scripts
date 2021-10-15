@@ -5,6 +5,7 @@ Repository of general-use scripts.
 ## SCRIPTS
 - backup: backup script that creates tgz archives
 - dotfiles: wrapper script for managing dotfiles using a git repository
+- dye: change color scheme using sed replacement
 - flash: terminal-based flash card store for studying
 - khaldump: cat khal ics files containing arguments
 - spread: remotely execute a command on a cluster of hosts
