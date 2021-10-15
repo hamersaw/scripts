@@ -1,0 +1,127 @@
+#!/bin/bash
+
+version="0.1.0"
+usage="USAGE: $(basename $0) COMMAND
+COMMAND:
+    apply <theme>       apply the specified theme
+    help                display this help menu
+    list                list registered themes
+    version             display the applications version"
+
+color_regex="[a-fA-F0-9]*"
+
+# declare applications
+declare -A applications
+applications[alacritty]=".config/alacritty/alacritty.yml"
+applications[bspwm]=".config/bspwm/bspwmrc"
+applications[conky]=".config/conky/conky"
+applications[dmenu]=".config/sxhkd/sxhkd"
+
+declare -A alacritty
+alacritty["background: '0xDYECOLOR' # dye enable"]="dye_background"
+alacritty["foreground: '0xDYECOLOR' # dye enable"]="dye_background"
+
+alacritty["black:   '0xDYECOLOR' # dye normal"]="dye_normal_black"
+alacritty["red:     '0xDYECOLOR' # dye normal"]="dye_normal_red"
+alacritty["green:   '0xDYECOLOR' # dye normal"]="dye_normal_green"
+alacritty["yellow:  '0xDYECOLOR' # dye normal"]="dye_normal_yellow"
+alacritty["blue:    '0xDYECOLOR' # dye normal"]="dye_normal_blue"
+alacritty["magenta: '0xDYECOLOR' # dye normal"]="dye_normal_magenta"
+alacritty["white:   '0xDYECOLOR' # dye normal"]="dye_normal_white"
+
+alacritty["black:   '0xDYECOLOR' # dye bright"]="dye_bright_black"
+alacritty["red:     '0xDYECOLOR' # dye bright"]="dye_bright_red"
+alacritty["green:   '0xDYECOLOR' # dye bright"]="dye_bright_green"
+alacritty["yellow:  '0xDYECOLOR' # dye bright"]="dye_bright_yellow"
+alacritty["blue:    '0xDYECOLOR' # dye bright"]="dye_bright_blue"
+alacritty["magenta: '0xDYECOLOR' # dye bright"]="dye_bright_magenta"
+alacritty["white:   '0xDYECOLOR' # dye bright"]="dye_bright_white"
+
+declare -A bspwm
+#bspwm["focused_border_color \"#DYECOLOR\""]="dye_background"
+
+declare -A conky
+
+declare -A dmenu
+
+# declare themes
+themes=( mocha_dark mocha_light)
+
+declare -A mocha_dark
+mocha_dark[dye_background]="3b3228"
+mocha_dark[dye_foreground]="d0c8c6"
+mocha_dark[dye_normal_black]="3b3228"
+mocha_dark[dye_normal_red]="cb6077"
+mocha_dark[dye_normal_green]="beb55b"
+mocha_dark[dye_normal_yellow]="f4bc87"
+mocha_dark[dye_normal_blue]="8ab3b5"
+mocha_dark[dye_normal_magenta]="a89bb9"
+mocha_dark[dye_normal_cyan]="7bbda4"
+mocha_dark[dye_normal_white]="d0c8c6"
+mocha_dark[dye_bright_black]="7e705a"
+mocha_dark[dye_bright_red]="cb6077"
+mocha_dark[dye_bright_green]="beb55b"
+mocha_dark[dye_bright_yellow]="f4bc87"
+mocha_dark[dye_bright_blue]="8ab3b5"
+mocha_dark[dye_bright_magenta]="a89bb9"
+mocha_dark[dye_bright_cyan]="7bbda4"
+mocha_dark[dye_bright_white]="f5eeeb"
+
+declare -A mocha_light
+mocha_dark[background]="f5eeeb"
+mocha_dark[foreground]="645240"
+
+mocha_dark[normal_black]="3b3228"
+mocha_dark[normal_red]="cb6077"
+mocha_dark[normal_green]="beb55b"
+mocha_dark[normal_yellow]="f4bc87"
+mocha_dark[normal_blue]="8ab3b5"
+mocha_dark[normal_magenta]="a89bb9"
+mocha_dark[normal_cyan]="7bbda4"
+mocha_dark[normal_white]="d0c8c6"
+
+mocha_dark[bright_black]="7e705a"
+mocha_dark[bright_red]="cb6077"
+mocha_dark[bright_green]="beb55b"
+mocha_dark[bright_yellow]="f4bc87"
+mocha_dark[bright_blue]="8ab3b5"
+mocha_dark[bright_magenta]="a89bb9"
+mocha_dark[bright_cyan]="7bbda4"
+mocha_dark[bright_white]="f5eeeb"
+
+# execute command
+case "$1" in
+    apply)
+        # validate applications before modifying
+        for application in "${!applications[@]}"; do
+            config="${applications[$application]}"
+            echo "$application $config"
+
+            declare -n updates="$application"
+            for update in "${!updates[@]}"; do
+                regex="${update/DYECOLOR/$color_regex}"
+
+                line_count=$(grep "$regex" "$config" | wc -l)
+                echo "  $line_count"
+                #echo "  $update $regex"
+            done
+        done
+
+        echo "TODO apply"
+        ;;
+    help)
+        echo "$usage"
+        ;;
+    list)
+        for theme in "${themes[@]}"; do
+            echo "$theme"
+        done
+        ;;
+    version)
+        echo "$version"
+        ;;
+    *)
+        echo "$usage"
+        exit 1
+        ;;
+esac
