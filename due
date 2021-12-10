@@ -1,408 +1,406 @@
-#!/bin/bash
+#!/bin/python3
 
-version="0.1.0"
-usage="USAGE: $(basename $0) COMMAND
+"""
+                LIST    CARD
+uuid            req     req
+description     req     req
+created                 req
+modified        req     req
+deleted         opt     opt
+parent                  req
+project                 opt
+note                    opt
+"""
 
-COMMAND:
-    add <element> [OPTION...] <title>   add an element at the desired location
-    help                                display this help menu
-    list                                list all elements
-    modify <element> [OPTION...]        update options on element
-    move <element> <element>            move an element within the same level
-    note <element>                      edit the element note
-    remove <element>                    remove the specified element
-    version                             display the application version
+import argparse
+import json
+import os
+import re
+import subprocess
+import sys
+import time
+import uuid
 
-OPTION:
-    <key>:<value>                       generic key value pair"
+BOLD = '\033[1m'
+END = '\033[0m'
 
-# id_validate(id, is_insert)
-id_validate() {
-    # validate regex
-    if [[ ! "$1" =~ ^[0-9]+(\.[0-9]+)*$ ]]; then
-        echo "invalid id '$1': invalid characters" && exit 1
-    fi
+def touch(filename):
+    f = open(filename, "a")
+    f.close()
 
-    # validate id length
-    local periodarray="${1//[^\.]}"
-    idlength="${#periodarray}"
-    if [ $idlength -gt 1 ]; then
-        echo "invalid id '$1': too many values" && exit 1
-    fi
+# intiailize data directory
+data_directory = os.getenv("HOME") + "/.local/share/due"
+if not os.path.exists(data_directory):
+    os.makedirs(data_directory)
+
+# initialize task files
+task_completed_file = data_directory + "/task.completed"
+task_data_file = data_directory + "/task.data"
+
+if not os.path.exists(task_completed_file):
+    touch(task_completed_file)
+
+if not os.path.exists(task_data_file):
+    touch(task_data_file)
+
+# convert an id into a list of indices
+def parse_id(id):
+    indices = []
+    try:
+        for value in id.split('.'):
+           indices.append(int(value)) 
+
+        if len(indices) < 1 or len(indices) > 2:
+            raise Exception("invalid value count")
+    except:
+        print("invalid id string '" + id + "'")
+        sys.exit(1)
+
+    return indices
+
+# convert feature string into <key, value> pair
+def parse_feature(feature):
+    match = re.match("^([-A-Za-z]+):(.*)$", feature)
+    if not match:
+        print("invalid feature string '" + feature + "'")
+        sys.exit(1)
+
+    return match.group(1), match.group(2)
+
+# get the row values for list and card ids
+def get_rows(data, metadata, indices, is_insert):
+    list_row = indices[0] - 1
+    card_row = None
 
     # validate list id
-    if [ $idlength -eq 0 ]; then
-        local listid="$1"
-        local listinsert="$2"
-        listrow="$1"
-    elif [ $idlength -eq 1 ]; then
-        local listid="${1%%\.*}"
-        local listinsert=0
-    fi
+    max_list_id = len(metadata)
+    if len(indices) == 1 and is_insert:
+        max_list_id += 1
 
-    listlength=$(wc -l $listfile | awk '{print $1}')
-    local maxlistid=$(( listlength + listinsert ))
-    if [ "$listid" -le 0 ] || [ "$listid" -gt $maxlistid ]; then
-        echo "invalid list index '$listid'" && exit 1
-    fi
-
-    # read cards if list exists
-    if [ $idlength -eq 0 -a $2 -eq 0 ] || [ $idlength -eq 1 ]; then
-        listuuid=$(sed -n "$listid p" $listfile | awk '{print $1}')
-        cards=$(awk '{print NR,$0}' $pendingfile | grep "$listuuid")
-    fi
+    if indices[0] <= 0 or indices[0] > max_list_id:
+        print("invalid list id '" + str(indices[0]) + "'")
+        sys.exit(1)
 
     # validate card id
-    if [ $idlength -eq 1 ]; then
-        if [[ "$cards" == "" ]]; then
-            local firstrowindex=1
-            local count=0
-        else
-            local firstrowindex=$(echo "$cards" | head -n 1 | awk '{print $1}')
-            local count=$(echo "$cards" | wc -l)
-        fi
+    if len(indices) == 2:
+        parent_uuid = data[list_row]["uuid"]
+        card_list = metadata[parent_uuid]
 
         # validate card id
-        local cardid="${1#*\.}"
-        local maxcardid=$(( count + $2 ))
-        if [ "$cardid" -le 0 ] || [ "$cardid" -gt $maxcardid ]; then
-            echo "invalid card index '$cardid'" && exit 1
-        fi
-
-        pendingrow=$(( firstrowindex + cardid - 1))
-    fi
-}
-
-# TODO - aggregate option_key and option_value to validate_option
-option_key() {
-    echo "${1%%:*}"
-}
-
-option_value() {
-    local value="${1#*:}"
-
-    # remove " characters from value
-    if [[ "$value" =~ \".*\" ]]; then
-        valuelen=${#value}
-        valuelen=$(( valuelen - 2 ))
-        value=${value:1:$valuelen}
-    fi
-
-    echo "$value"
-}
-
-parse_record() {
-    declare -n localrecord="$2"
-    while read block; do
-        key=$(option_key "$block")
-        value=$(option_value "$block")
-        localrecord["$key"]="$value"
-    done < <(echo "$1" | grep -o '[.A-Za-z]*:"[()-.A-Za-z0-9 ]*"')
-}
-
-record_to_string() {
-    declare -n localrecord="$1"
-
-    cardstring=""
-    for key in $(sort -n <<<"$(printf "%s\n" "${!localrecord[@]}")"); do
-        if [ "${#cardstring}" != 0 ]; then
-            cardstring+=" "
-        fi
-
-        cardstring+="$key:\"${localrecord[$key]}\""
-    done
-
-    echo "[$cardstring]"
-}
-
-# initialize instance variables
-datadir="$HOME/.local/share/$(basename $0)"
-listfile="$datadir/list.txt"
-completedfile="$datadir/completed.data"
-pendingfile="$datadir/pending.data"
-
-# if doesn't exist -> create base configuration files
-[ ! -d "$datadir" ] && mkdir -p "$datadir"
-[ ! -f "$listfile" ] && touch "$listfile"
-[ ! -f "$completedfile" ] && touch "$completedfile"
-[ ! -f "$pendingfile" ] && touch "$pendingfile"
-
-# execute command
-case "$1" in
-    add)
-        # check argument length
-        (( $# < 3 )) && echo "'$1' requires at least two arguments" && exit 1
-
-        # validate arguments
-        id_validate "$2" "1"
-
-        # initialize record variables
-        declare -A record
-        record[description]="${@: -1}"
-        record[uuid]=$(cat /proc/sys/kernel/random/uuid)
-
-        # initialize card variables
-        if [ $idlength == 1 ]; then
-            timestamp=$(date +%s)
-            record[created]=$timestamp
-            record[modified]=$timestamp
-            record[listuuid]=$listuuid # TODO - abstract fieldname
-        fi
-
-        # parse options
-        indexlength=$(( $# - 3 ))
-        for argument in "${@:3:$indexlength}"; do
-            key=$(option_key "$argument")
-            value=$(option_value "$argument")
-
-            record[$key]="$value"
-        done
-
-        # add element # TODO - abstract list and card files
-        if [ $idlength == 0 ]; then
-            # add list
-            if [ "$listrow" -gt $listlength ]; then
-                echo "${record[uuid]} ${record[description]}" >> "$listfile"
-            else
-                sed -i "$listrow i ${record[uuid]} ${record[description]}" "$listfile"
-            fi
-        elif [ $idlength == 1 ]; then
-            # compile card string
-            cardstring=$(record_to_string record)
-
-            # add card at index
-            pendinglength=$(wc -l $pendingfile | awk '{print $1}')
-            if [ "$pendingrow" -gt $pendinglength ]; then
-                echo "$cardstring" >> $pendingfile
-            else
-                sed -i "$pendingrow i $cardstring" $pendingfile
-            fi
-        fi
-
-        echo "[+] added '$2' '${record[description]}'"
-        ;;
-    help)
-        echo "$usage"
-        ;;
-    list)
-        fmtstring="%-6s%-6s%-6s%s"
-        printf "\033[1m$fmtstring\033[0m\n" "LIST" "CARD" "NOTE" "DESCRIPTION"
-
-        # iterate over listfile
-        while read listline; do
-            # echo list number and description
-            read -r -a listarray <<< "$listline"
-            echo -e "\033[1m${listarray[0]} ${listarray[@]:2}\033[0m"
-
-            # iterate over list cards
-            cardid=1
-            while read line; do
-                # parse card into record associative array
-                declare -A record
-                parse_record "$line" record
-
-                # check if note file exists
-                notefile="$datadir/${record[uuid]}.md"
-                if [ -f "$notefile" ]; then
-                    noteexists="x"
-                fi
-
-                # print card
-                printf "$fmtstring\n" "" "${listarray[0]}.$cardid" \
-                    "$noteexists" "${record[description]}"
-
-                # increment card id
-                cardid=$(( cardid + 1 ))
-
-                tags=""
-                unset record
-            done < <(cat $pendingfile | grep "${listarray[1]}")
-        done < <(awk '{print NR, $0}' "$listfile")
-        ;;
-    modify)
-        # check argument length
-        (( $# < 3 )) && \
-            echo "'$1' requires at least two arguments" && exit 1
-
-        # validate arguments
-        id_validate "$2" "0"
-        if [ "$idlength" != 1 ]; then
-            echo "'$1' command only allowed on cards" && exit 1
-        fi
-
-        # retrieve line from pendingfile
-        line=$(sed -n "$pendingrow p" "$pendingfile")
-
-        # parse and update record
-        declare -A record
-        parse_record "$line" record
-
-        indexlength=$(( $# - 2 ))
-        for argument in "${@:3:$indexlength}"; do
-            key=$(option_key "$argument")
-            value=$(option_value "$argument")
-
-            record[$key]="$value"
-        done
-
-        record[modified]=$(date +%s)
-        cardstring=$(record_to_string record)
-
-        # replace line in pending file
-        sed -i "$pendingrow c $cardstring" $pendingfile
-
-        echo "[|] modified '$2'"
-        ;;
-    move)
-        # check argument length
-        (( $# != 3 )) && echo "'$1' requires three arguments" && exit 1
-
-        # validate arguments
-        id_validate "$2" "0"
-        srcidlength="$idlength"
-
-        # TODO - check if indices are the same level
-        #if [ $srcidlength != $dstidlength ]; then
-        #    echo "" && exit 1
-        #fi
-
-        if [ $srcidlength == 0 ]; then
-            # move list
-            srclistrow="$listrow"
-
-            id_validate "$3" "1"
-            dstlistrow="$listrow"
-
-            # remove line from listfile
-            line=$(sed -n "$srclistrow p" "$listfile")
-            sed -i "$srclistrow d" "$listfile"
-            listlength=$(( listlength - 1 ))
-
-            # re-add line to listfile
-            if [ "$dstlistrow" -gt $listlength ]; then
-                echo "$line" >> "$listfile"
-            else
-                sed -i "$dstlistrow i $line" "$listfile"
-            fi
-        elif [ $srcidlength == 1 ]; then
-            # parse pending row indices for source and destinate ids
-            srcpendingrow="$pendingrow"
-            srclistuuid="$listuuid"
-
-            id_validate "$3" 1
-            dstpendingrow="$pendingrow"
-            dstlistuuid="$listuuid"
-
-            # retrieve line from pendingfile
-            line=$(sed -n "$srcpendingrow p" "$pendingfile")
-
-            # parse and update record
-            declare -A record
-            parse_record "$line" record
-
-            record[listuuid]=$dstlistuuid
-            record[modified]=$(date +%s)
-
-            cardstring=$(record_to_string record)
-
-            # remove line from pendingfile
-            pendinglength=$(wc -l $pendingfile | awk '{print $1}')
-            sed -i "$srcpendingrow d" "$pendingfile"
-            pendinglength=$(( pendinglength - 1 ))
-
-            # re-add cardstring to pendingfile
-            if [ "$srclistuuid" != "$dstlistuuid" ] && \
-                    [ "$srcpendingrow" -lt "$dstpendingrow" ]; then
-                dstpendingrow=$(( dstpendingrow - 1 ))
-            fi
-
-            if [ "$dstpendingrow" -gt $pendinglength ]; then
-                echo "$cardstring" >> $pendingfile
-            else
-                sed -i "$dstpendingrow i $cardstring" $pendingfile
-            fi
-        fi
-
-        echo "[|] moved '$2' to '$3'"
-        ;;
-    note)
-        # check argument length
-        (( $# != 2 )) && echo "'$1' requires one argument" && exit 1
-
-        # validate arguments
-        id_validate "$2" "0"
-        if [ "$idlength" != 1 ]; then
-            echo "'$1' command only allowed on cards" && exit 1
-        fi
-
-        # retrieve line from pendingfile
-        line=$(sed -n "$pendingrow p" "$pendingfile")
-
-        # parse and update record
-        declare -A record
-        parse_record "$line" record
-
-        record[modified]=$(date +%s)
-        cardstring=$(record_to_string record)
-
-        # replace line in pending file
-        sed -i "$pendingrow c $cardstring" $pendingfile
-
-        # edit card note
-        notefile="$datadir/${record[uuid]}.md"
-        vim "$notefile"
-
-        # if note file is empty -> remove
-        if [ ! -s "$notefile" ]; then
-            rm "$notefile"
-        fi
-        ;;
-    remove)
-        # check argument length
-        (( $# != 2 )) && echo "'$1' requires one argument" && exit 1
-
-        # validate arguments
-        id_validate "$2" "0"
-
-        if [ $idlength == 0 ]; then
-            # check if list is empty
-            if [ "$cards" != "" ]; then
-                echo "list '$2' is not empty" && exit 1
-            fi
-
-            # remove line from listfile
-            sed -i "$listrow d" "$listfile"
-        elif [ $idlength == 1 ]; then
-            # retrieve line from pendingfile
-            line=$(sed -n "$pendingrow p" "$pendingfile")
-
-            # parse and update record
-            declare -A record
-            parse_record "$line" record
-            record[end]=$(date +%s)
-
-            cardstring=$(record_to_string record)
-
-            # dcheck if note file exists
-            notefile="$datadir/${record[uuid]}.md"
-            if [ -f "$notefile" ]; then
-                rm "$notefile"
-            fi
-
-            # remove line from pendingfile
-            sed -i "$pendingrow d" "$pendingfile"
-
-            # add card to completed file
-            echo "$cardstring" >> $completedfile
-        fi
-
-        echo "[-] removed '$2'"
-        ;;
-    version)
-        echo "$version"
-        ;;
-    *)
-        echo "$usage"
-        exit 1
-        ;;
-esac
+        max_card_id = len(card_list)
+        if is_insert:
+            max_card_id += 1
+
+        if indices[1] <= 0 or indices[1] > max_card_id:
+            print("invalid card id '" + str(indices[1]) + "'")
+            sys.exit(1)
+
+        if len(card_list) == 0:
+            card_row = len(data)
+        else:
+            card_row = card_list[0] + indices[1] - 1
+
+    return list_row, card_row
+
+def add(args, data, metadata):
+    # parse and validate id
+    indices = parse_id(args.ID)
+    list_row, card_row = get_rows(data, metadata, indices, True)
+
+    # initialize record
+    timestamp = int(time.time())
+    datum = {
+        "uuid": str(uuid.uuid4()),
+        "description": args.DESCRIPTION,
+        "created": timestamp,
+        "modified": timestamp,
+    }
+
+    # parse features and update datum
+    for feature in args.FEATURE:
+        key, value = parse_feature(feature)
+        datum[key] = value
+    
+    # add datum
+    if len(indices) == 1:
+        data.insert(list_row, datum)
+    elif len(indices) == 2:
+        datum["parent"] = data[list_row]["uuid"]
+        data.insert(card_row, datum)
+
+    return data
+
+def cat(args, data, metadata):
+    # parse and validate id
+    indices = parse_id(args.ID)
+    list_row, card_row = get_rows(data, metadata, indices, False)
+
+    # find datum
+    if len(indices) == 1:
+        datum = data[list_row]
+    elif len(indices) == 2:
+        datum = data[card_row]
+
+    # write existing note to note file
+    note = datum.get("note", "")
+    print(note, end="")
+
+def list(args, data, metadata):
+    listfmt = "%-6s%-6s%-6s%s"
+    print((BOLD + listfmt + END) % ("LIST", "CARD", "NOTE", "DESCRIPTION"))
+
+    # iterate over data lists
+    for list_count, list_uuid in enumerate(metadata):
+        list_datum = data[list_count]
+        print(BOLD + str(list_count + 1) + " " + list_datum["description"] + END)
+
+        # iterate over card list
+        card_list = metadata[list_uuid]
+        for card_count, card_row in enumerate(card_list):
+            # TODO - apply feature filters
+
+            card_datum = data[card_row]
+            note_flag = ""
+            if "note" in card_datum:
+                note_flag = "x"
+
+            print(listfmt % ("",
+                str(list_count + 1) + "." + str(card_count + 1),
+                note_flag,
+                card_datum["description"]))
+
+def modify(args, data, metadata):
+    # parse and validate id
+    indices = parse_id(args.ID)
+    list_row, card_row = get_rows(data, metadata, indices, False)
+
+    # retrieve datum
+    if len(indices) == 1:
+        datum = data[list_row]
+    elif len(indices) == 2:
+        datum = data[card_row]
+
+    # parse features and update datum
+    for feature in args.FEATURE:
+        key, value = parse_feature(feature)
+        datum[key] = value
+
+    datum["modified"] = int(time.time())
+    return data
+
+def move(args, data, metadata):
+    # parse
+    src_indices = parse_id(args.SRC_ID)
+    dst_indices = parse_id(args.DST_ID)
+
+    # ensure ids have equal length
+    if len(src_indices) != len(dst_indices):
+        print("source id '" + args.SRC_ID + "' and destination id '"
+            + args.DST_ID + "' have different length")
+        sys.exit(1)
+
+    # validate ids
+    is_insert = True
+    if len(src_indices) == 1 or src_indices[0] == dst_indices[0]:
+        is_insert = False
+
+    src_list_row, src_card_row = \
+        get_rows(data, metadata, src_indices, is_insert)
+    dst_list_row, dst_card_row = \
+        get_rows(data, metadata, dst_indices, is_insert)
+
+    if len(src_indices) == 1:
+        # update datum
+        datum = data[src_list_row]
+
+        # delete original datum
+        del data[src_list_row]
+
+        # insert new datum
+        data.insert(dst_list_row, datum)
+
+    if len(src_indices) == 2:
+        # update datum
+        datum = data[src_card_row]
+        datum["parent"] = data[dst_list_row]["uuid"]
+
+        # delete original datum
+        del data[src_card_row]
+
+        # insert new datum
+        if src_list_row != dst_list_row and src_card_row < dst_card_row:
+            dst_card_row -= 1
+
+        data.insert(dst_card_row, datum)
+
+    return data
+
+def note(args, data, metadata):
+    # parse and validate id
+    indices = parse_id(args.ID)
+    list_row, card_row = get_rows(data, metadata, indices, False)
+
+    # find datum
+    if len(indices) == 1:
+        datum = data[list_row]
+    elif len(indices) == 2:
+        datum = data[card_row]
+
+    # write existing note to note file
+    note_file = data_directory + "/" + datum["uuid"] + ".md"
+
+    note = datum.get("note", "")
+    with open(note_file, "w") as f:
+        f.write(note)
+
+    # launch editor
+    return_value = subprocess.call("vim " + note_file, shell=True)
+
+    # read new note contents
+    with open(note_file, "r") as f:
+        content = f.readlines()
+        note = "".join(content)
+
+    os.remove(note_file)
+
+    # write note to datum
+    if note != "":
+        datum["note"] = note
+    elif "note" in datum:
+        del datum["note"]
+
+    datum["modified"] = int(time.time())
+    return data
+
+def remove(args, data, metadata):
+    # parse and validate id
+    indices = parse_id(args.ID)
+    list_row, card_row = get_rows(data, metadata, indices, False)
+
+    # delete datum
+    if len(indices) == 1:
+        # check if list has children
+        list_uuid = data[list_row]["uuid"]
+        if len(metadata[list_uuid]) != 0:
+            print("list '" + str(indices[0]) + "' is not empty")
+            sys.exit(1)
+
+        del data[list_row]
+    elif len(indices) == 2:
+        # add datum to completed file
+        datum = data[card_row]
+
+        datum["completed"] = int(time.time())
+        with open(task_completed_file, "a") as f:
+            f.write(json.dumps(datum, sort_keys=True) + "\n")
+
+        del data[card_row]
+
+    return data
+
+def show(args, data, metadata):
+    # parse and validate id
+    indices = parse_id(args.ID)
+    list_row, card_row = get_rows(data, metadata, indices, False)
+
+    # print datum
+    if len(indices) == 1:
+        datum = data[list_row]
+    elif len(indices) == 2:
+        datum = data[card_row]
+
+    print(json.dumps(datum, sort_keys=False, indent=2))
+
+if __name__ == "__main__":
+    # initialize argument parser
+    parser = argparse.ArgumentParser()
+    subparsers = parser.add_subparsers(title="subcommands", dest="subparser")
+
+    add_parser = subparsers.add_parser("add",
+        help="add an element at the specified location")
+    add_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+    add_parser.add_argument("FEATURE", nargs="*",
+        help="element features [format: 'key:value'] pair")
+    add_parser.add_argument("DESCRIPTION",
+        help="description of element")
+
+    cat_parser = subparsers.add_parser("cat",
+        help="display note attached to the specified element")
+    cat_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+
+    list_parser = subparsers.add_parser("list",
+        help="list all elements")
+
+    modify_parser = subparsers.add_parser("modify",
+        help="modify features on a specific element")
+    modify_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+    modify_parser.add_argument("FEATURE", nargs="*",
+        help="element features [format: 'key:value'] pair")
+
+    move_parser = subparsers.add_parser("move",
+        help="move an element within the same id level")
+    move_parser.add_argument("SRC_ID",
+        help="source element identifer [format: period delimited indices]")
+    move_parser.add_argument("DST_ID",
+        help="descrination element identifer [format: period delimited indices]")
+
+    note_parser = subparsers.add_parser("note",
+        help="edit the note attached to the specified element")
+    note_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+
+    remove_parser = subparsers.add_parser("remove",
+        help="remove the specified element")
+    remove_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+
+    show_parser = subparsers.add_parser("show",
+        help="show all features from the specified element")
+    show_parser.add_argument("ID",
+        help="element identifer [format: period delimited indices]")
+
+    # parse arguments
+    args = parser.parse_args()
+    if args.subparser == None:
+        parser.print_help()
+        sys.exit(1)
+
+    # parse data contents
+    f = open(task_data_file, "r")
+    contents = f.readlines()
+    f.close()
+
+    data = []
+    for content in contents:
+        data.append(json.loads(content))
+
+    metadata = {}
+    for count, datum in enumerate(data):
+        if "parent" in datum:
+            metadata[datum["parent"]].append(count)
+        else:
+            metadata[datum["uuid"]] = []
+
+    # execute subcommand
+    subcommands = {
+        "add": add,
+        "cat": cat,
+        "list": list,
+        "move": move,
+        "modify": modify,
+        "note": note,
+        "remove": remove,
+        "show": show,
+    }
+
+    data = subcommands.get(args.subparser)(args, data, metadata)
+
+    # write contents back
+    if data:
+        f = open(task_data_file, "w")
+        for datum in data:
+            f.write(json.dumps(datum, sort_keys=True) + "\n")
+        f.close()
