@@ -12,7 +12,6 @@ project                 opt
 note                    opt
 """
 
-import argparse
 import json
 import os
 import re
@@ -20,6 +19,23 @@ import subprocess
 import sys
 import time
 import uuid
+
+help_message = """USAGE: due COMMAND
+COMMAND:
+    add <ID> [FEATURE...] <DESC>    add an element at the desired location
+    cat <ID>                        display note attached to the specified element
+    help                            display this help menu
+    list                            list all elements
+    modify <ID> [FEATURE...]        update options on element
+    move <SRCID> <DSTID>            move an element within the same level
+    note <ID>                       edit the element note
+    remove <ID>                     remove the specified element
+
+FEATURE:
+    <KEY>:<VALUE>                   generic key value pair
+
+ID:
+    (1-9)(.1-9)*                    dynamic element identifier""" 
 
 BOLD = '\033[1m'
 END = '\033[0m'
@@ -103,21 +119,26 @@ def get_rows(data, metadata, indices, is_insert):
     return list_row, card_row
 
 def add(args, data, metadata):
+    # validate arguments
+    if len(args) < 2:
+        print("the 'add' command requires at least 2 arguments")
+        sys.exit(1)
+
     # parse and validate id
-    indices = parse_id(args.ID)
+    indices = parse_id(args[0])
     list_row, card_row = get_rows(data, metadata, indices, True)
 
     # initialize record
     timestamp = int(time.time())
     datum = {
         "uuid": str(uuid.uuid4()),
-        "description": args.DESCRIPTION,
+        "description": args[len(args)-1],
         "created": timestamp,
         "modified": timestamp,
     }
 
     # parse features and update datum
-    for feature in args.FEATURE:
+    for feature in args[1:len(args)-1]:
         key, value = parse_feature(feature)
         datum[key] = value
     
@@ -131,8 +152,13 @@ def add(args, data, metadata):
     return data
 
 def cat(args, data, metadata):
+    # validate arguments
+    if len(args) != 1:
+        print("the 'cat' command requires 1 argument")
+        sys.exit(1)
+
     # parse and validate id
-    indices = parse_id(args.ID)
+    indices = parse_id(args[0])
     list_row, card_row = get_rows(data, metadata, indices, False)
 
     # find datum
@@ -146,6 +172,11 @@ def cat(args, data, metadata):
     print(note, end="")
 
 def list(args, data, metadata):
+    # validate arguments
+    if len(args) != 0:
+        print("the 'list' command requires 0 arguments")
+        sys.exit(1)
+
     listfmt = "%-6s%-6s%-6s%s"
     print((BOLD + listfmt + END) % ("LIST", "CARD", "NOTE", "DESCRIPTION"))
 
@@ -169,9 +200,17 @@ def list(args, data, metadata):
                 note_flag,
                 card_datum["description"]))
 
+def help(args, data, metadata):
+    print(help_message)
+
 def modify(args, data, metadata):
+    # validate arguments
+    if len(args) < 2:
+        print("the 'modify' command requires at least 2 arguments")
+        sys.exit(1)
+
     # parse and validate id
-    indices = parse_id(args.ID)
+    indices = parse_id(args[0])
     list_row, card_row = get_rows(data, metadata, indices, False)
 
     # retrieve datum
@@ -181,7 +220,7 @@ def modify(args, data, metadata):
         datum = data[card_row]
 
     # parse features and update datum
-    for feature in args.FEATURE:
+    for feature in args[1:]:
         key, value = parse_feature(feature)
         datum[key] = value
 
@@ -189,14 +228,19 @@ def modify(args, data, metadata):
     return data
 
 def move(args, data, metadata):
+    # validate arguments
+    if len(args) != 2:
+        print("the 'move' command requires 2 arguments")
+        sys.exit(1)
+
     # parse
-    src_indices = parse_id(args.SRC_ID)
-    dst_indices = parse_id(args.DST_ID)
+    src_indices = parse_id(args[0])
+    dst_indices = parse_id(args[1])
 
     # ensure ids have equal length
     if len(src_indices) != len(dst_indices):
-        print("source id '" + args.SRC_ID + "' and destination id '"
-            + args.DST_ID + "' have different length")
+        print("source id '" + args[0] + "' and destination id '"
+            + args[1] + "' have different length")
         sys.exit(1)
 
     # validate ids
@@ -236,8 +280,13 @@ def move(args, data, metadata):
     return data
 
 def note(args, data, metadata):
+    # validate arguments
+    if len(args) != 1:
+        print("the 'note' command requires 1 argument")
+        sys.exit(1)
+
     # parse and validate id
-    indices = parse_id(args.ID)
+    indices = parse_id(args[0])
     list_row, card_row = get_rows(data, metadata, indices, False)
 
     # find datum
@@ -273,8 +322,13 @@ def note(args, data, metadata):
     return data
 
 def remove(args, data, metadata):
+    # validate arguments
+    if len(args) != 1:
+        print("the 'remove' command requires 1 argument")
+        sys.exit(1)
+
     # parse and validate id
-    indices = parse_id(args.ID)
+    indices = parse_id(args[0])
     list_row, card_row = get_rows(data, metadata, indices, False)
 
     # delete datum
@@ -299,8 +353,13 @@ def remove(args, data, metadata):
     return data
 
 def show(args, data, metadata):
+    # validate arguments
+    if len(args) != 1:
+        print("the 'show' command requires 1 argument")
+        sys.exit(1)
+
     # parse and validate id
-    indices = parse_id(args.ID)
+    indices = parse_id(args[0])
     list_row, card_row = get_rows(data, metadata, indices, False)
 
     # print datum
@@ -312,60 +371,19 @@ def show(args, data, metadata):
     print(json.dumps(datum, sort_keys=False, indent=2))
 
 if __name__ == "__main__":
-    # initialize argument parser
-    parser = argparse.ArgumentParser()
-    subparsers = parser.add_subparsers(title="subcommands", dest="subparser")
+    commands = {
+        "add": add,
+        "cat": cat,
+        "list": list,
+        "move": move,
+        "modify": modify,
+        "note": note,
+        "remove": remove,
+        "show": show,
+    }
 
-    add_parser = subparsers.add_parser("add",
-        help="add an element at the specified location")
-    add_parser.add_argument("ID",
-        help="element identifer [format: period delimited indices]")
-    add_parser.add_argument("FEATURE", nargs="*",
-        help="element features [format: 'key:value'] pair")
-    add_parser.add_argument("DESCRIPTION",
-        help="description of element")
-
-    cat_parser = subparsers.add_parser("cat",
-        help="display note attached to the specified element")
-    cat_parser.add_argument("ID",
-        help="element identifer [format: period delimited indices]")
-
-    list_parser = subparsers.add_parser("list",
-        help="list all elements")
-
-    modify_parser = subparsers.add_parser("modify",
-        help="modify features on a specific element")
-    modify_parser.add_argument("ID",
-        help="element identifer [format: period delimited indices]")
-    modify_parser.add_argument("FEATURE", nargs="*",
-        help="element features [format: 'key:value'] pair")
-
-    move_parser = subparsers.add_parser("move",
-        help="move an element within the same id level")
-    move_parser.add_argument("SRC_ID",
-        help="source element identifer [format: period delimited indices]")
-    move_parser.add_argument("DST_ID",
-        help="descrination element identifer [format: period delimited indices]")
-
-    note_parser = subparsers.add_parser("note",
-        help="edit the note attached to the specified element")
-    note_parser.add_argument("ID",
-        help="element identifer [format: period delimited indices]")
-
-    remove_parser = subparsers.add_parser("remove",
-        help="remove the specified element")
-    remove_parser.add_argument("ID",
-        help="element identifer [format: period delimited indices]")
-
-    show_parser = subparsers.add_parser("show",
-        help="show all features from the specified element")
-    show_parser.add_argument("ID",
-        help="element identifer [format: period delimited indices]")
-
-    # parse arguments
-    args = parser.parse_args()
-    if args.subparser == None:
-        parser.print_help()
+    if len(sys.argv) <= 1 or sys.argv[1] == "help" or not sys.argv[1] in commands:
+        print(help_message)
         sys.exit(1)
 
     # parse data contents
@@ -385,18 +403,7 @@ if __name__ == "__main__":
             metadata[datum["uuid"]] = []
 
     # execute subcommand
-    subcommands = {
-        "add": add,
-        "cat": cat,
-        "list": list,
-        "move": move,
-        "modify": modify,
-        "note": note,
-        "remove": remove,
-        "show": show,
-    }
-
-    data = subcommands.get(args.subparser)(args, data, metadata)
+    data = commands[sys.argv[1]](sys.argv[2:] , data, metadata)
 
     # write contents back
     if data:
