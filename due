@@ -24,12 +24,14 @@ help_message = """USAGE: due COMMAND
 COMMAND:
     add <ID> [FEATURE...] <DESC>    add an element at the desired location
     cat <ID>                        display note attached to the specified element
+    context                         list all initialized contexts
     help                            display this help menu
     list                            list all elements
     modify <ID> [FEATURE...]        update options on element
     move <SRCID> <DSTID>            move an element within the same level
     note <ID>                       edit the element note
     remove <ID>                     remove the specified element
+    switch <CONTEXT>                change the currently active context
 
 FEATURE:
     <KEY>:<VALUE>                   generic key value pair
@@ -50,14 +52,10 @@ if not os.path.exists(data_directory):
     os.makedirs(data_directory)
 
 # initialize task files
-task_completed_file = data_directory + "/task.completed"
-task_data_file = data_directory + "/task.data"
+context_file = data_directory + "/context.txt"
 
-if not os.path.exists(task_completed_file):
-    touch(task_completed_file)
-
-if not os.path.exists(task_data_file):
-    touch(task_data_file)
+if not os.path.exists(context_file):
+    touch(context_file)
 
 # convert an id into a list of indices
 def parse_id(id):
@@ -382,9 +380,41 @@ if __name__ == "__main__":
         "show": show,
     }
 
-    if len(sys.argv) <= 1 or sys.argv[1] == "help" or not sys.argv[1] in commands:
+    if len(sys.argv) <= 1 or sys.argv[1] == "help":
         print(help_message)
         sys.exit(1)
+    elif sys.argv[1] == "context":
+        print("unimplemented")
+        sys.exit(1)
+    elif sys.argv[1] == "switch":
+        if len(sys.argv) != 3:
+            print("the 'switch' command requires 1 argument")
+            sys.exit(1)
+
+        f = open(context_file, "w")
+        f.write(sys.argv[2])
+        f.close()
+        sys.exit(1)
+    elif not sys.argv[1] in commands:
+        print(help_message)
+        sys.exit(1)
+
+    # parse context
+    f = open(context_file, "r")
+    context = f.read()
+    f.close()
+
+    if context == "":
+        print("context does not exist - set with 'switch' command")
+        sys.exit(1)
+
+    task_completed_file = data_directory + "/" + context + ".completed"
+    task_data_file = data_directory + "/" + context + ".data"
+    if not os.path.exists(task_completed_file):
+        touch(task_completed_file)
+
+    if not os.path.exists(task_data_file):
+        touch(task_data_file)
 
     # parse data contents
     f = open(task_data_file, "r")
