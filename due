@@ -186,13 +186,13 @@ case "$1" in
         ;;
     list)
         fmtstring="%-6s%-6s%-6s%s"
-        printf "$fmtstring\n" "LIST" "CARD" "NOTE" "DESCRIPTION"
+        printf "\033[1m$fmtstring\033[0m\n" "LIST" "CARD" "NOTE" "DESCRIPTION"
 
         # iterate over listfile
         while read listline; do
             # echo list number and description
             read -r -a listarray <<< "$listline"
-            echo "${listarray[0]} ${listarray[@]:2}"
+            echo -e "\033[1m${listarray[0]} ${listarray[@]:2}\033[0m"
 
             # iterate over list cards
             cardid=1
