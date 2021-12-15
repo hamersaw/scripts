@@ -384,7 +384,10 @@ if __name__ == "__main__":
         print(help_message)
         sys.exit(1)
     elif sys.argv[1] == "context":
-        print("unimplemented")
+        for f in os.listdir(data_directory):
+            ext = os.path.splitext(f)
+            if ext[1] == ".data":
+                print(ext[0])
         sys.exit(1)
     elif sys.argv[1] == "switch":
         if len(sys.argv) != 3:
@@ -396,7 +399,7 @@ if __name__ == "__main__":
         f.close()
         sys.exit(1)
     elif not sys.argv[1] in commands:
-        print(help_message)
+        print("command '" + sys.argv[1] + "' does not exist")
         sys.exit(1)
 
     # parse context
