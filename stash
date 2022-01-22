@@ -39,8 +39,12 @@ case "$1" in
         fi
 
         # copy to clip
-        echo "$value" | cut -f2- -d ' ' | xclip -selection clipboard
+        echo "$value" | cut -f2- -d ' ' | tr -d '\n' | xclip -selection clipboard
         $(sleep 3; echo -n "" | xclip -selection clipboard) &
+
+        # this should work, but doesn't when pasting as a firefox url
+        # https://stackoverflow.com/questions/22686866/why-has-xclip-loop-1-stopped-working
+        #echo "$value" | cut -f2- -d ' ' | tr -d '\n' | xclip -loops 1 -selection clipboard
         ;;
     get)
         # check argument length
