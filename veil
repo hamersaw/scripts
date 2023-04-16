@@ -5,7 +5,7 @@ usage="USAGE: $(basename $0) COMMAND
 COMMAND:
     clip <group> <key>          copy a key's value to the clipboard
     create <group> [tag...]
-    delete <group>
+    delete [group...]
     help                        display this help menu
     init <gpg-username>         initailize the veil repository
     list [tag..]
@@ -78,14 +78,19 @@ case "$1" in
         ;;
     delete)
         # check argument length
-        (( $# != 2 )) && echo "'$1' requires one argument" && exit 1
+        (( $# < 2 )) && echo "'$1' requires at least one argument" && exit 1
+        contents=$(gpg -d -q $veilfile)
 
-        # remove 'group' from veilfile
-        # TODO @hamersaw - should be able to remove multiple groups in one command
+        # remove 'groups'
         mv $veilfile $veilfile.bak
-        gpg -d -q $veilfile.bak | grep -v -P "^. $2( |$)" \
-            | gpg -e -r $gpgusername > $veilfile
-        [ $? -ne 0 ] && echo "failed to remove group '$2' from veilfile" && exit 1
+        for i in "${@:2}"
+        do
+            contents=$(echo "$contents" | grep -v -P "^. $i( |$)")
+        done
+
+        # encrypt and flush contents to disk
+        echo "$contents" | sort | gpg -e -r $gpgusername > $veilfile
+        [ $? -ne 0 ] && echo "failed to remove tag(s) '${@:3}' to veilfile" && exit 1
 
         # remove '.bak' file
         rm $veilfile.bak
@@ -227,21 +232,26 @@ case "$1" in
         ;;
     unset)
         # check argument length
-        (( $# != 3 )) && echo "'$1' requires two arguments" && exit 1
+        (( $# < 3 )) && echo "'$1' requires at least two arguments" && exit 1
+        contents=$(gpg -d -q $veilfile)
 
-        # remove 'key' from veilfile
-        # TODO @hamersaw - should support removing multiple keys
+        # remove 'keys'
         mv $veilfile $veilfile.bak
-        gpg -d -q $veilfile.bak | grep -v "^k $2 $3 .*" \
-            | gpg -e -r $gpgusername > $veilfile
-        [ $? -ne 0 ] && echo "failed to remove group key '$2:$3' from veilfile" && exit 1
+        for i in "${@:3}"
+        do
+            contents=$(echo "$contents" | grep -v "^k $2 $i .*$")
+        done
+
+        # encrypt and flush contents to disk
+        echo "$contents" | sort | gpg -e -r $gpgusername > $veilfile
+        [ $? -ne 0 ] && echo "failed to remove keys(s) '${@:3}' from veilfile" && exit 1
 
         # remove '.bak' file
         rm $veilfile.bak
         ;;
     untag)
         # check argument length
-        (( $# < 3 )) && echo "'$1' requires at least one argument" && exit 1
+        (( $# < 3 )) && echo "'$1' requires at least two arguments" && exit 1
         contents=$(gpg -d -q $veilfile)
 
         # remove 'tags'
@@ -253,7 +263,7 @@ case "$1" in
 
         # encrypt and flush contents to disk
         echo "$contents" | sort | gpg -e -r $gpgusername > $veilfile
-        [ $? -ne 0 ] && echo "failed to remove tag(s) '${@:3}' to veilfile" && exit 1
+        [ $? -ne 0 ] && echo "failed to remove tag(s) '${@:3}' from veilfile" && exit 1
 
         # remove '.bak' file
         rm $veilfile.bak
