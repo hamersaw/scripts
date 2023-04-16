@@ -1,0 +1,268 @@
+#!/bin/bash
+
+version="0.1.0"
+usage="USAGE: $(basename $0) COMMAND
+COMMAND:
+    clip <group> <key>          copy a key's value to the clipboard
+    create <group> [tag...]
+    delete <group>
+    help                        display this help menu
+    init <gpg-username>         initailize the veil repository
+    list [tag..]
+    recover                     fix system following a failure
+    set <group> <key> [value]   store the value for the specified key
+    tag <group> [tag...]
+    show <group>
+    unset <group> <key>         remove values for the key (and all subkeys)
+    untag <group> [tag...]
+    version                     display the applications version"
+
+# check if applications are available
+[ ! $(which gpg) ] && echo "'gpg' not found in users PATH" && exit 1
+[ ! $(which xclip) ] && echo "'xclip' not found in users PATH" && exit 1
+
+# initialize instance variables - set veildir if not already set
+[ -z "$veildir" ] && veildir="$HOME/.local/share/veil"
+veilfile="$veildir/veilfile.gpg"
+userfile="$veildir/userfile"
+
+if [ -f $userfile ]; then
+    gpgusername=$(cat $userfile)
+fi
+
+# execute command
+case "$1" in
+    clip)
+        # check argument length
+        (( $# != 3 )) && echo "'$1' requires two arguments" && exit 1
+
+        # validate key exists
+        value=$(gpg -d -q $veilfile | grep "^k $2 $3 .*")
+        if [ -z "$value" ]; then
+            echo "group key '$2:$3' does not exist" && exit 1
+        fi
+
+        # copy to clip
+        echo "$value" | cut -f4- -d ' ' | tr -d '\n' | xclip -selection clipboard
+        $(sleep 3; echo -n "" | xclip -selection clipboard) &
+
+        # this should work, but doesn't when pasting as a firefox url
+        # https://stackoverflow.com/questions/22686866/why-has-xclip-loop-1-stopped-working
+        #echo "$value" | cut -f2- -d ' ' | tr -d '\n' | xclip -loops 1 -selection clipboard
+        ;;
+    create)
+        # check argument length
+        (( $# < 2 )) && echo "'$1' requires at least one argument" && exit 1
+        contents=$(gpg -d -q $veilfile)
+
+        # check if 'group' exists in veilfile
+        echo "$contents" | grep -q "^g $2$" && \
+            echo "group '$2' already exists" && exit 1
+
+        # add 'group' to veilfile
+        mv $veilfile $veilfile.bak
+        contents=$(echo -e "$contents\ng $2")
+
+        # add 'tags'
+        for i in "${@:3}"
+        do
+            contents=$(echo -e "$contents\nt $2 $i")
+        done
+
+        # encrypt and flush contents to disk
+        echo "$contents" | sort | gpg -e -r $gpgusername > $veilfile
+        [ $? -ne 0 ] && echo "failed to add group '$2' to veilfile" && exit 1
+
+        # remove '.bak' file
+        rm $veilfile.bak
+        ;;
+    delete)
+        # check argument length
+        (( $# != 2 )) && echo "'$1' requires one argument" && exit 1
+
+        # remove 'group' from veilfile
+        # TODO @hamersaw - should be able to remove multiple groups in one command
+        mv $veilfile $veilfile.bak
+        gpg -d -q $veilfile.bak | grep -v -P "^. $2( |$)" \
+            | gpg -e -r $gpgusername > $veilfile
+        [ $? -ne 0 ] && echo "failed to remove group '$2' from veilfile" && exit 1
+
+        # remove '.bak' file
+        rm $veilfile.bak
+        ;;
+    help)
+        echo "$usage"
+        ;;
+    init)
+        # check argument length
+        (( $# != 2 )) && echo "'init' requires one argument" && exit 1
+
+        # test if veildir already exists
+        [ -d "$veildir" ] && \
+            echo "veil directory '$veildir' already exists" && exit 1
+
+        # validate gpg username
+        [[ ! $(gpg --list-secret-keys | grep $2) ]] \
+            && echo "gpg key '$2' doesn't exist" && exit 1
+
+        # create veildir, veilfile, and userfile
+        # TODO @hamersaw - verify successful completion of these commands
+        mkdir -p $veildir
+        echo "" | sed "/^$/d" | gpg -e -r $2 > $veilfile
+        echo "$2" > $userfile
+        ;;
+    list)
+        # list all groups
+        contents=$(gpg -d -q $veilfile)
+        groups=$(echo "$contents" | grep "^g" | awk '{print $2}')
+
+        # filter by tags
+        for i in "${@:2}"
+        do
+            tagged=$(echo "$contents" | grep "^t .* $i$" | awk '{print $2}')
+            groups=$(comm -12 <(echo "$groups") <(echo "$tagged"))
+        done
+
+        # print results it not empty
+        if [[ ! -z "$groups" ]]; then
+            echo "$groups"
+        fi
+        ;;
+    recover)
+        # check for failure
+        [ ! -f $veilfile.bak ] && echo "unable to detect failure" && exit 1
+
+        # replace existing file with bakfile
+        rm $veilfile
+        mv $veilfile.bak $veilfile
+        ;;
+    set)
+        # check argument length
+        (( $# != 3 )) && (( $# != 4 )) \
+            && echo "'$1' requires either two or three arguments" && exit 1
+        contents=$(gpg -d -q $veilfile)
+
+        # check if 'group' exists in veilfile
+        if ! $(echo "$contents" | grep -q "^g $2$"); then
+            echo "group '$2' does not exist" && exit 1
+        fi
+
+        # check if key already exists
+        echo "$contents" | grep -q "^k $2 $3 .*$" && \
+            echo "group key '$2:$3' already exists" && exit 1
+
+        mv $veilfile $veilfile.bak
+
+        # if value not provided generate from urandom
+        value="$4"
+        if [ -z "$value" ]; then
+            value=$(< /dev/urandom tr -dc _@#%^+=A-Z-a-z-0-9 | head -c20)
+        fi
+
+        # add 'key' and 'value'
+        contents=$(echo -e "$contents\nk $2 $3 $value")
+
+        # encrypt and flush contents to disk
+        echo "$contents" | sort | gpg -e -r $gpgusername > $veilfile
+        [ $? -ne 0 ] && echo "failed to add group key '$2:$3' to veilfile" && exit 1
+
+        # remove '.bak' file
+        rm $veilfile.bak
+
+        # print if generated value
+        if [ -z "$4" ]; then
+            echo "$value"
+        fi
+        ;;
+    show)
+        # check argument length
+        (( $# != 2 )) && echo "'$1' requires one argument" && exit 1
+        contents=$(gpg -d -q $veilfile)
+
+        # check if 'group' exists in veilfile
+        if ! $(echo "$contents" | grep -q "^g $2$"); then
+            echo "group '$2' does not exist" && exit 1
+        fi
+
+        # TODO @hamersaw - support key list argument to display values
+        # print all group metadata
+        echo "group: $2"
+        #keystrings=$(echo "$contents" | grep "k $2 .*" | awk '{print "-",$3,":",$4}')
+        keystrings=$(echo "$contents" | grep "k $2 .*" | awk '{print "-",$3}')
+        if [ ! -z "$keystrings" ]; then
+            echo -e "keys:\n$keystrings"
+        fi
+        tagstrings=$(echo "$contents" | grep "t $2 .*" | awk '{print "-",$3}')
+        if [ ! -z "$tagstrings" ]; then
+            echo -e "tags:\n$tagstrings"
+        fi
+        ;;
+    tag)
+        # check argument length
+        (( $# < 3 )) && echo "'$1' requires at least two arguments" && exit 1
+        contents=$(gpg -d -q $veilfile)
+
+        # check if 'group' exists in veilfile
+        if ! $(echo "$contents" | grep -q "^g $2$"); then
+            echo "group '$2' does not exist" && exit 1
+        fi
+
+        # add 'tags'
+        mv $veilfile $veilfile.bak
+        for i in "${@:3}"
+        do
+            # check if tag already exists
+            echo "$contents" | grep -q "^t $2 $i$" && \
+                echo "tag '$i' already exists" && continue
+
+            contents=$(echo -e "$contents\nt $2 $i")
+        done
+
+        # encrypt and flush contents to disk
+        echo "$contents" | sort | gpg -e -r $gpgusername > $veilfile
+        [ $? -ne 0 ] && echo "failed to add tag(s) '${@:3}' to veilfile" && exit 1
+
+        # remove '.bak' file
+        rm $veilfile.bak
+        ;;
+    unset)
+        # check argument length
+        (( $# != 3 )) && echo "'$1' requires two arguments" && exit 1
+
+        # remove 'key' from veilfile
+        # TODO @hamersaw - should support removing multiple keys
+        mv $veilfile $veilfile.bak
+        gpg -d -q $veilfile.bak | grep -v "^k $2 $3 .*" \
+            | gpg -e -r $gpgusername > $veilfile
+        [ $? -ne 0 ] && echo "failed to remove group key '$2:$3' from veilfile" && exit 1
+
+        # remove '.bak' file
+        rm $veilfile.bak
+        ;;
+    untag)
+        # check argument length
+        (( $# < 3 )) && echo "'$1' requires at least one argument" && exit 1
+        contents=$(gpg -d -q $veilfile)
+
+        # remove 'tags'
+        mv $veilfile $veilfile.bak
+        for i in "${@:3}"
+        do
+            contents=$(echo "$contents" | grep -v "^t $2 $i$")
+        done
+
+        # encrypt and flush contents to disk
+        echo "$contents" | sort | gpg -e -r $gpgusername > $veilfile
+        [ $? -ne 0 ] && echo "failed to remove tag(s) '${@:3}' to veilfile" && exit 1
+
+        # remove '.bak' file
+        rm $veilfile.bak
+        ;;
+    version)
+        echo "$version"
+        ;;
+    *)
+        echo "$usage"
+        exit 1
+        ;;
+esac
