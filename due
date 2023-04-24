@@ -4,11 +4,7 @@
                 LIST    CARD
 uuid            req     req
 description     req     req
-created                 req
-modified        req     req
-deleted         opt     opt
 parent                  req
-project                 opt
 note                    opt
 """
 
@@ -22,19 +18,16 @@ import uuid
 
 help_message = """USAGE: due COMMAND
 COMMAND:
-    add <ID> [FEATURE...] <DESC>    add an element at the desired location
-    cat <ID>                        display note attached to the specified element
-    context                         list all initialized contexts
-    help                            display this help menu
-    list                            list all elements
-    modify <ID> [FEATURE...]        update options on element
-    move <SRCID> <DSTID>            move an element within the same level
-    note <ID>                       edit the element note
-    remove <ID>                     remove the specified element
-    switch <CONTEXT>                change the currently active context
-
-FEATURE:
-    <KEY>:<VALUE>                   generic key value pair
+    add <ID> <DESC>         add an element at the desired location
+    cat <ID>                display note attached to the specified element
+    context                 list all initialized contexts
+    help                    display this help menu
+    list                    list all elements
+    move <SRCID> <DSTID>    move an element within the same level
+    note <ID>               edit the element note
+    remove <ID>             remove the specified element
+    switch <CONTEXT>        change the currently active context
+    update <ID> <DESC>      update description on element
 
 ID:
     (1-9)(.1-9)*                    dynamic element identifier""" 
@@ -71,15 +64,6 @@ def parse_id(id):
         sys.exit(1)
 
     return indices
-
-# convert feature string into <key, value> pair
-def parse_feature(feature):
-    match = re.match("^([-A-Za-z]+):(.*)$", feature)
-    if not match:
-        print("invalid feature string '" + feature + "'")
-        sys.exit(1)
-
-    return match.group(1), match.group(2)
 
 # get the row values for list and card ids
 def get_rows(data, metadata, indices, is_insert):
@@ -119,7 +103,7 @@ def get_rows(data, metadata, indices, is_insert):
 def add(args, data, metadata):
     # validate arguments
     if len(args) < 2:
-        print("the 'add' command requires at least 2 arguments")
+        print("the 'add' command requires 2 arguments")
         sys.exit(1)
 
     # parse and validate id
@@ -127,19 +111,11 @@ def add(args, data, metadata):
     list_row, card_row = get_rows(data, metadata, indices, True)
 
     # initialize record
-    timestamp = int(time.time())
     datum = {
         "uuid": str(uuid.uuid4()),
-        "description": args[len(args)-1],
-        "created": timestamp,
-        "modified": timestamp,
+        "description": args[1],
     }
 
-    # parse features and update datum
-    for feature in args[1:len(args)-1]:
-        key, value = parse_feature(feature)
-        datum[key] = value
-    
     # add datum
     if len(indices) == 1:
         data.insert(list_row, datum)
@@ -201,10 +177,10 @@ def list(args, data, metadata):
 def help(args, data, metadata):
     print(help_message)
 
-def modify(args, data, metadata):
+def update(args, data, metadata):
     # validate arguments
-    if len(args) < 2:
-        print("the 'modify' command requires at least 2 arguments")
+    if len(args) != 2:
+        print("the 'update' command requires 2 arguments")
         sys.exit(1)
 
     # parse and validate id
@@ -217,12 +193,7 @@ def modify(args, data, metadata):
     elif len(indices) == 2:
         datum = data[card_row]
 
-    # parse features and update datum
-    for feature in args[1:]:
-        key, value = parse_feature(feature)
-        datum[key] = value
-
-    datum["modified"] = int(time.time())
+    datum["description"] = args[1]
     return data
 
 def move(args, data, metadata):
@@ -316,7 +287,6 @@ def note(args, data, metadata):
     elif "note" in datum:
         del datum["note"]
 
-    datum["modified"] = int(time.time())
     return data
 
 def remove(args, data, metadata):
@@ -341,8 +311,6 @@ def remove(args, data, metadata):
     elif len(indices) == 2:
         # add datum to completed file
         datum = data[card_row]
-
-        datum["completed"] = int(time.time())
         with open(task_completed_file, "a") as f:
             f.write(json.dumps(datum, sort_keys=True) + "\n")
 
@@ -374,10 +342,10 @@ if __name__ == "__main__":
         "cat": cat,
         "list": list,
         "move": move,
-        "modify": modify,
         "note": note,
         "remove": remove,
         "show": show,
+        "update": update,
     }
 
     if len(sys.argv) <= 1 or sys.argv[1] == "help":
