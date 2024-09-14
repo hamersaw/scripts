@@ -9,10 +9,12 @@ COMMAND:
     help                        display this help menu
     init <gpg-username>         initailize the veil repository
     list [tag..]
+    list-keys
     recover                     fix system following a failure
     set <group> <key> [value]   store the value for the specified key
     tag <group> [tag...]
     show <group>
+    show-keys <group>
     unset <group> <key>         remove values for the key (and all subkeys)
     untag <group> [tag...]
     version                     display the applications version"
@@ -133,6 +135,16 @@ case "$1" in
             echo "$groups"
         fi
         ;;
+    list-keys)
+        contents=$(gpg -d -q $veilfile)
+        keys=$(echo "$contents" | grep "^k" | awk '{printf "%s:%s\n",$2,$3}')
+
+        # print results it not empty
+        if [[ ! -z "$keys" ]]; then
+            echo "$keys"
+        fi
+
+        ;;
     recover)
         # check for failure
         [ ! -f $veilfile.bak ] && echo "unable to detect failure" && exit 1
@@ -201,6 +213,19 @@ case "$1" in
         if [ ! -z "$tagstrings" ]; then
             echo -e "tags:\n$tagstrings"
         fi
+        ;;
+    show-keys)
+        # check argument length
+        (( $# != 2 )) && echo "'$1' requires one argument" && exit 1
+        contents=$(gpg -d -q $veilfile)
+
+        # check if 'group' exists in veilfile
+        if ! $(echo "$contents" | grep -q "^g $2$"); then
+            echo "group '$2' does not exist" && exit 1
+        fi
+
+        # print all group keys
+        echo $(echo "$contents" | grep "k $2 .*" | awk '{print $3}')
         ;;
     tag)
         # check argument length
