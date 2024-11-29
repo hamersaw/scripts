@@ -21,7 +21,7 @@ COMMAND:
 
 # check if applications are available
 [ ! $(which gpg) ] && echo "'gpg' not found in users PATH" && exit 1
-[ ! $(which xclip) ] && echo "'xclip' not found in users PATH" && exit 1
+[ ! $(which wl-copy) ] && echo "'wl-copy' not found in users PATH" && exit 1
 
 # initialize instance variables - set veildir if not already set
 [ -z "$veildir" ] && veildir="$HOME/.local/share/veil"
@@ -45,12 +45,10 @@ case "$1" in
         fi
 
         # copy to clip
-        echo "$value" | cut -f4- -d ' ' | tr -d '\n' | xclip -selection clipboard
-        $(sleep 3; echo -n "" | xclip -selection clipboard) &
-
-        # this should work, but doesn't when pasting as a firefox url
-        # https://stackoverflow.com/questions/22686866/why-has-xclip-loop-1-stopped-working
-        #echo "$value" | cut -f2- -d ' ' | tr -d '\n' | xclip -loops 1 -selection clipboard
+        # TODO @hamersaw `wl-copy -o` does not work on chrome in wayland yet
+        # so we do a hacky "wait 3 seconds then copy nothing to clipboard"
+        nohup bash -c "sleep 3; wl-copy -c" &>> /dev/null &
+        echo "$value" | cut -f4- -d ' ' | tr -d '\n' | wl-copy
         ;;
     create)
         # check argument length

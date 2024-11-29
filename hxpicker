@@ -1,0 +1,30 @@
+#!/bin/bash
+# https://github.com/zellij-org/zellij/issues/3018#issuecomment-2086166900
+
+tmpfile=/tmp/hx-file-picker.txt
+alacritty --class menu -e yazi --chooser-file $tmpfile
+
+while read line; do
+  echo ":open $line" | wtype -d 1 -
+done <$tmpfile
+
+rm -f $tmpfile
+
+
+# #!/bin/bash
+
+# # retrieve window id
+# window_id=$(hyprctl activewindow | head -n 1 | awk '{print $2}')
+# echo $window_id
+
+# # open alacritty in another window
+# hyprctl dispatch layoutmsg preselect l
+
+# alacritty -e "yazi" &
+
+# # start hx
+# #hyprctl dispatch splitratio 0.2
+# #hyprctl dispatch resizeactive -96 0 
+# sleep 0.3
+# hyprctl dispatch resizeactive -384 0 
+# hx
