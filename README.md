@@ -34,9 +34,9 @@ Repository of general-use scripts.
 - rustup
 - sdkman
 #### misc
-- Install and setup Inconsolata and Font Awesome
+- Install and setup fonts
 ```
-sudo apt install fonts-inconsolata fonts-font-awesome
+sudo apt install fonts-font-awesome fonts-inconsolata fonts-noto
 
 cat <<'EOF' > ~/.config/fontconfig/conf.d/99-font-awesome-fallback.conf
 <?xml version="1.0"?>
