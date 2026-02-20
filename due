@@ -272,7 +272,7 @@ def note(args, data, metadata):
         f.write(note)
 
     # launch editor
-    return_value = subprocess.call("hx " + note_file, shell=True)
+    return_value = subprocess.call("vim " + note_file, shell=True)
 
     # read new note contents
     with open(note_file, "r") as f:
