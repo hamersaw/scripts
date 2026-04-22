@@ -1,0 +1,35 @@
+#!/usr/bin/env bash
+# Regenerate blog RSS feeds.
+# Runs every *.py in $CONFIG_DIR; each writes <stem>.xml into $FEED_DIR.
+# Scripts declare their deps via PEP 723 headers and run under `uv run`.
+
+set -euo pipefail
+
+CONFIG_DIR="${XDG_CONFIG_HOME:-$HOME/.config}/refresh-blogs"
+FEED_DIR="${XDG_DATA_HOME:-$HOME/.local/share}/refresh-blogs"
+
+mkdir -p "$FEED_DIR"
+
+shopt -s nullglob
+scripts=("$CONFIG_DIR"/*.py)
+shopt -u nullglob
+
+if [[ ${#scripts[@]} -eq 0 ]]; then
+    echo "no scrapers found in $CONFIG_DIR" >&2
+    exit 1
+fi
+
+failed=()
+for script in "${scripts[@]}"; do
+    name=$(basename "$script" .py)
+    echo "==> $name"
+    if ! uv run --script "$script" "$FEED_DIR/$name.xml"; then
+        failed+=("$name")
+    fi
+done
+
+if [[ ${#failed[@]} -gt 0 ]]; then
+    echo >&2
+    echo "failed: ${failed[*]}" >&2
+    exit 1
+fi

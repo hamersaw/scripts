@@ -38,6 +38,8 @@ Repository of general-use scripts.
 ```
 sudo apt install fonts-inconsolata fonts-font-awesome
 
+mkdir -p .config/fontconfig/conf.d
+
 cat <<'EOF' > ~/.config/fontconfig/conf.d/99-font-awesome-fallback.conf
 <?xml version="1.0"?>
 <!DOCTYPE fontconfig SYSTEM "fonts.dtd">
